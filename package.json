@@ -9,8 +9,8 @@
     "test": "vitest run"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "vladeck",
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "lit": "^3.3.3",

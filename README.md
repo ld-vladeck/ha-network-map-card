@@ -1,5 +1,10 @@
 # Network Map Card for Home Assistant
 
+> ### ⚠️ Progetto Personale & Supporto (Feel free to fork!)
+> Questo è un progetto sviluppato originariamente per esigenze personali e condiviso liberamente a beneficio della community.
+> **Non viene fornito supporto attivo, manutenzione o sviluppo di nuove funzionalità su richiesta.**
+> Se desideri apportare modifiche, correzioni o estensioni per il tuo ambiente, **sentiti libero di fare un Fork del repository** e personalizzarlo a tuo piacimento!
+
 Una Custom Lovelace Card per Home Assistant che visualizza dinamicamente la topologia della rete locale sotto forma di grafo interattivo ad albero o costellazione radiale.
 
 Il componente deduce i collegamenti fisici e logici combinando i dati provenienti dalle integrazioni di rete (es. router principale, access point, switch gestiti), interrogando il `device_registry` e l'`entity_registry` di Home Assistant, escludendo automaticamente i dispositivi disattivati, estraendo i MAC address hardware dalle connessioni e risolvendo i conflitti di connessione tramite un algoritmo a profondità massima (**Max-Depth Edge Resolution**).
