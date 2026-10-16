@@ -29,21 +29,21 @@ describe('TopologyEngine', () => {
 
     const integrations: IntegrationConfig[] = [
       {
-        config_entry_id: 'zte_router_id',
+        config_entry_id: 'router_integration_id',
         root_mac: routerMac,
         lan_values: ['LAN 1', 'LAN 2'],
       },
       {
-        config_entry_id: 'tplink_ap_id',
+        config_entry_id: 'ap_integration_id',
         root_mac: apMac,
         wifi_values: ['5 GHz'],
       },
     ];
 
-    const zteClients: DiscoveredClient[] = [
+    const routerClients: DiscoveredClient[] = [
       {
         mac: apMac,
-        name: 'TP-Link Access Point',
+        name: 'Access Point Secondario',
         linkInfo: 'LAN 1',
       },
       {
@@ -53,12 +53,12 @@ describe('TopologyEngine', () => {
       },
       {
         mac: phoneMac,
-        name: 'Smartphone (ZTE detected)',
+        name: 'Smartphone (Router detected)',
         // No linkInfo -> generic interface
       },
     ];
 
-    const tplinkClients: DiscoveredClient[] = [
+    const apClients: DiscoveredClient[] = [
       {
         mac: phoneMac,
         name: 'Smartphone Mario',
@@ -68,12 +68,12 @@ describe('TopologyEngine', () => {
     ];
 
     const clientsMap = new Map<string, DiscoveredClient[]>();
-    clientsMap.set('zte_router_id', zteClients);
-    clientsMap.set('tplink_ap_id', tplinkClients);
+    clientsMap.set('router_integration_id', routerClients);
+    clientsMap.set('ap_integration_id', apClients);
 
     const rootNames = new Map<string, string>();
-    rootNames.set(routerMac, 'Router ZTE Principale');
-    rootNames.set(apMac, 'Access Point TP-Link');
+    rootNames.set(routerMac, 'Router Principale');
+    rootNames.set(apMac, 'Access Point Secondario');
 
     const result = TopologyEngine.buildGraph({
       masterRootMac: routerMac,
@@ -94,7 +94,7 @@ describe('TopologyEngine', () => {
     expect(wifi5GhzInterface).toBeDefined();
     expect(wifi5GhzInterface?.connectionType).toBe('wifi');
 
-    // 2. Verify Phone is connected through the deeper TP-Link 5 GHz interface
+    // 2. Verify Phone is connected through the deeper AP 5 GHz interface
     const phoneEdge = result.edges.find((e) => e.to === phoneMac);
     expect(phoneEdge).toBeDefined();
     expect(phoneEdge?.from).toBe(wifi5GhzInterface?.id);

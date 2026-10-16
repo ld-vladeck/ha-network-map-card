@@ -169,6 +169,8 @@ export class HaHelper {
     const deviceToConfigEntries = new Map<string, string[]>();
 
     for (const dev of devices) {
+      if (dev.disabled_by) continue; // Skip disabled devices
+
       if (dev.config_entries) {
         deviceToConfigEntries.set(dev.id, dev.config_entries);
 
@@ -206,6 +208,8 @@ export class HaHelper {
     }
 
     for (const ent of entities) {
+      if (ent.disabled_by) continue; // Skip disabled entities
+
       const isTracker = ent.entity_id.startsWith('device_tracker.');
 
       // Directly linked config entry
@@ -302,6 +306,7 @@ export class HaHelper {
 
       const matchingDevices = devices.filter((dev) => {
         if (!dev.config_entries) return false;
+        if (dev.disabled_by) return false; // Exclude disabled devices
         return (
           dev.config_entries.includes(searchKey) ||
           dev.config_entries.some((c) => c.toLowerCase() === searchKey.toLowerCase())
@@ -320,8 +325,9 @@ export class HaHelper {
         }
 
         const devEntities = entitiesByDeviceId.get(dev.id) || [];
-        const trackerEntities = devEntities.filter((e) => e.entity_id.startsWith('device_tracker.'));
-        const primaryEntity = trackerEntities.length > 0 ? trackerEntities[0] : devEntities[0];
+        const enabledDevEntities = devEntities.filter((e) => !e.disabled_by);
+        const trackerEntities = enabledDevEntities.filter((e) => e.entity_id.startsWith('device_tracker.'));
+        const primaryEntity = trackerEntities.length > 0 ? trackerEntities[0] : enabledDevEntities[0];
 
         let entityState = primaryEntity ? hass.states[primaryEntity.entity_id] : undefined;
 
@@ -392,5 +398,118 @@ export class HaHelper {
       rootNames,
       diagnostics,
     };
+  }
+
+  /**
+   * Scans ALL devices and entities for a given configEntryId and returns all discovered attribute names.
+   */
+  public static scanAvailableAttributes(hass: HomeAssistant, configEntryId: string): string[] {
+    const devices = this.deviceRegistryCache || [];
+    const entities = this.entityRegistryCache || [];
+
+    const targetDevices = new Set(
+      devices
+        .filter((d) => !d.disabled_by && d.config_entries && d.config_entries.includes(configEntryId))
+        .map((d) => d.id)
+    );
+
+    const attributeSet = new Set<string>();
+
+    for (const ent of entities) {
+      if (ent.disabled_by) continue;
+      const matchesDirect = ent.config_entry_id === configEntryId;
+      const matchesDevice = ent.device_id && targetDevices.has(ent.device_id);
+
+      if (matchesDirect || matchesDevice) {
+        const stateObj = hass.states[ent.entity_id];
+        if (stateObj && stateObj.attributes) {
+          for (const key of Object.keys(stateObj.attributes)) {
+            // Ignore common internal HA attributes
+            if (
+              key === 'friendly_name' ||
+              key === 'icon' ||
+              key === 'entity_picture' ||
+              key === 'restored' ||
+              key === 'supported_features'
+            ) {
+              continue;
+            }
+            attributeSet.add(key);
+          }
+        }
+      }
+    }
+
+    // Sort with common port/channel candidate attributes first
+    const priorityKeywords = ['port', 'channel', 'lan', 'wifi', 'conn', 'type', 'interface', 'ssid'];
+    return Array.from(attributeSet).sort((a, b) => {
+      const aLower = a.toLowerCase();
+      const bLower = b.toLowerCase();
+      const aScore = priorityKeywords.findIndex((k) => aLower.includes(k));
+      const bScore = priorityKeywords.findIndex((k) => bLower.includes(k));
+
+      if (aScore !== -1 && bScore !== -1) return aScore - bScore;
+      if (aScore !== -1) return -1;
+      if (bScore !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }
+
+  /**
+   * Scans ALL devices of a config entry to collect all observed unique values for a given attribute.
+   */
+  public static scanUniqueAttributeValues(
+    hass: HomeAssistant,
+    configEntryId: string,
+    attributeName: string
+  ): string[] {
+    if (!attributeName) return [];
+
+    const devices = this.deviceRegistryCache || [];
+    const entities = this.entityRegistryCache || [];
+
+    const targetDevices = new Set(
+      devices
+        .filter((d) => !d.disabled_by && d.config_entries && d.config_entries.includes(configEntryId))
+        .map((d) => d.id)
+    );
+
+    const valuesSet = new Set<string>();
+
+    for (const ent of entities) {
+      if (ent.disabled_by) continue;
+      const matchesDirect = ent.config_entry_id === configEntryId;
+      const matchesDevice = ent.device_id && targetDevices.has(ent.device_id);
+
+      if (matchesDirect || matchesDevice) {
+        const stateObj = hass.states[ent.entity_id];
+        if (stateObj && stateObj.attributes && stateObj.attributes[attributeName] !== undefined) {
+          const val = String(stateObj.attributes[attributeName]).trim();
+          if (val) {
+            valuesSet.add(val);
+          }
+        }
+      }
+    }
+
+    return Array.from(valuesSet).sort();
+  }
+
+  /**
+   * Auto-detects the root MAC address of an integration from its gateway/main device.
+   */
+  public static autoDetectRootMac(hass: HomeAssistant, configEntryId: string): string | undefined {
+    const devices = this.deviceRegistryCache || [];
+    const matching = devices.filter((d) => d.config_entries && d.config_entries.includes(configEntryId));
+
+    // Prefer device without parent (gateway device)
+    const gateway = matching.find((d) => !d.via_device_id) || matching[0];
+    if (gateway && gateway.connections && Array.isArray(gateway.connections)) {
+      const macConn = gateway.connections.find((c) => Array.isArray(c) && c[0]?.toLowerCase() === 'mac');
+      if (macConn && macConn[1]) {
+        return normalizeMac(macConn[1]);
+      }
+    }
+    return undefined;
   }
 }

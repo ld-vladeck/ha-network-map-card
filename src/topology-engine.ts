@@ -41,9 +41,7 @@ export class TopologyEngine {
       if (rootMac) {
         allRoots.add(rootMac);
         if (!nodesMap.has(rootMac)) {
-          const resolvedName =
-            rootNames.get(rootMac) ||
-            (rootMac === masterRootMac ? 'Router Principale' : `Access Point (${rootMac})`);
+          const resolvedName = rootNames.get(rootMac) || integration.name || rootMac;
 
           nodesMap.set(rootMac, {
             id: rootMac,
@@ -59,7 +57,7 @@ export class TopologyEngine {
 
     if (masterRootMac && !nodesMap.has(masterRootMac)) {
       allRoots.add(masterRootMac);
-      const resolvedName = rootNames.get(masterRootMac) || 'Router Principale';
+      const resolvedName = rootNames.get(masterRootMac) || masterRootMac;
       nodesMap.set(masterRootMac, {
         id: masterRootMac,
         label: resolvedName,

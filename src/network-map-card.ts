@@ -3,6 +3,7 @@ import { Network, DataSet } from 'vis-network/standalone';
 import { HomeAssistant, NetworkMapCardConfig, IntegrationConfig, NetworkNode } from './types';
 import { TopologyEngine, normalizeMac } from './topology-engine';
 import { HaHelper, RegistryFetchResult } from './ha-helper';
+import './network-map-card-editor';
 
 export class NetworkMapCard extends LitElement {
   private _hass?: HomeAssistant;
@@ -114,7 +115,7 @@ export class NetworkMapCard extends LitElement {
     .card-content-area {
       position: relative;
       width: 100%;
-      height: var(--network-map-height, 520px);
+      height: var(--network-map-height, min(70vh, 650px));
       min-height: 380px;
     }
     .network-container {
@@ -350,16 +351,17 @@ export class NetworkMapCard extends LitElement {
     }));
 
     this._config = {
-      title: 'Mappa di Rete Locale',
-      height: '520px',
+      title: 'Mappa di Rete',
       debug: false,
       ...config,
       master_root_mac: masterRootMac,
       integrations,
     };
 
-    if (this._config.height) {
+    if (this._config.height && this._config.height.trim()) {
       this.style.setProperty('--network-map-height', this._config.height);
+    } else {
+      this.style.removeProperty('--network-map-height');
     }
 
     this._updateTopology();
@@ -378,10 +380,26 @@ export class NetworkMapCard extends LitElement {
   protected firstUpdated(_changedProperties: PropertyValues): void {
     super.firstUpdated(_changedProperties);
     this._initNetwork();
+
+    if (window.ResizeObserver) {
+      this._resizeObserver = new ResizeObserver(() => {
+        if (this._network) {
+          this._network.redraw();
+        }
+      });
+      const container = this.shadowRoot?.querySelector('.network-container');
+      if (container) {
+        this._resizeObserver.observe(container);
+      }
+    }
   }
 
   public disconnectedCallback(): void {
     super.disconnectedCallback();
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = undefined;
+    }
     if (this._network) {
       try {
         this._network.destroy();
@@ -391,40 +409,95 @@ export class NetworkMapCard extends LitElement {
     this._initialized = false;
   }
 
-  private _initNetwork(): void {
-    const container = this.shadowRoot?.querySelector('.network-container') as HTMLDivElement | null;
-    if (!container || this._network) return;
+  private _currentLayoutMode = '';
 
-    const isDark =
-      this._hass?.themes?.darkMode ??
-      window.matchMedia('(prefers-color-scheme: dark)').matches;
+  private _buildNetworkOptions(isDark: boolean, layoutMode: string) {
+    const isTree = layoutMode === 'tree' || !layoutMode;
+    const isHorizontal = layoutMode === 'horizontal';
 
-    const data = {
-      nodes: this._nodesDataSet,
-      edges: this._edgesDataSet,
-    };
+    let layoutConfig: any = { hierarchical: { enabled: false } };
+    let physicsConfig: any = {};
 
-    const options = {
-      layout: {
+    if (isTree) {
+      layoutConfig = {
         hierarchical: {
-          enabled: false,
+          enabled: true,
+          direction: 'UD',
+          sortMethod: 'directed',
+          levelSeparation: 115,
+          nodeSpacing: 110,
+          treeSpacing: 135,
+          parentCentralization: true,
+          blockShifting: true,
+          edgeMinimization: true,
         },
-      },
-      physics: {
-        solver: 'forceAtlas2Based',
-        forceAtlas2Based: {
-          gravitationalConstant: -125, // Forte repulsione per evitare che i nomi dei nodi si sovrappongano
-          centralGravity: 0.012,
-          springLength: 160, // Distanza aumentata dal nodo genitore
-          springConstant: 0.06,
-          damping: 0.55,
-          avoidOverlap: 1, // Evita sovrapposizione tra nodi vicini
+      };
+      physicsConfig = {
+        hierarchicalRepulsion: {
+          centralGravity: 0.0,
+          springLength: 85,
+          nodeDistance: 110,
+          damping: 0.12,
         },
         stabilization: {
-          iterations: 150,
-          updateInterval: 30,
+          enabled: true,
+          iterations: 120,
+          updateInterval: 25,
+          fit: true,
         },
-      },
+      };
+    } else if (isHorizontal) {
+      layoutConfig = {
+        hierarchical: {
+          enabled: true,
+          direction: 'LR',
+          sortMethod: 'directed',
+          levelSeparation: 150,
+          nodeSpacing: 65,
+          treeSpacing: 100,
+          parentCentralization: true,
+        },
+      };
+      physicsConfig = {
+        hierarchicalRepulsion: {
+          centralGravity: 0.0,
+          springLength: 95,
+          nodeDistance: 65,
+          damping: 0.12,
+        },
+        stabilization: {
+          enabled: true,
+          iterations: 120,
+          updateInterval: 25,
+          fit: true,
+        },
+      };
+    } else {
+      // Radial / Costellazione
+      layoutConfig = { hierarchical: { enabled: false } };
+      physicsConfig = {
+        solver: 'forceAtlas2Based',
+        forceAtlas2Based: {
+          gravitationalConstant: -110,
+          centralGravity: 0.015,
+          springLength: 140,
+          springConstant: 0.08,
+          damping: 0.85,
+          avoidOverlap: 0.85,
+        },
+        minVelocity: 0.75,
+        stabilization: {
+          enabled: true,
+          iterations: 120,
+          updateInterval: 25,
+          fit: true,
+        },
+      };
+    }
+
+    return {
+      layout: layoutConfig,
+      physics: physicsConfig,
       interaction: {
         hover: true,
         dragNodes: true,
@@ -455,7 +528,8 @@ export class NetworkMapCard extends LitElement {
       },
       edges: {
         arrows: {
-          to: { enabled: true, scaleFactor: 0.5 },
+          to: { enabled: false },
+          from: { enabled: false },
         },
         font: {
           color: isDark ? '#aaaaaa' : '#666666',
@@ -463,13 +537,26 @@ export class NetworkMapCard extends LitElement {
           align: 'middle',
           background: isDark ? '#1c1c1c' : '#ffffff',
         },
-        smooth: {
-          enabled: true,
-          type: 'cubicBezier',
-          roundness: 0.35,
-        },
       },
     };
+  }
+
+  private _initNetwork(): void {
+    const container = this.shadowRoot?.querySelector('.network-container') as HTMLDivElement | null;
+    if (!container || this._network) return;
+
+    const isDark =
+      this._hass?.themes?.darkMode ??
+      window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    const data = {
+      nodes: this._nodesDataSet,
+      edges: this._edgesDataSet,
+    };
+
+    const layoutMode = this._config?.layout_mode || 'tree';
+    this._currentLayoutMode = layoutMode;
+    const options = this._buildNetworkOptions(isDark, layoutMode);
 
     try {
       this._network = new Network(container, data, options);
@@ -498,13 +585,30 @@ export class NetworkMapCard extends LitElement {
     this._lastUpdateTime = Date.now();
 
     try {
-      const integrations = this._config.integrations || [];
-      const fetchResult = await HaHelper.fetchClients(this._hass, integrations);
+      let rawIntegrations = this._config.integrations || [];
+
+      // Auto-detect root_mac for integrations if not provided
+      const resolvedIntegrations = rawIntegrations.map((int) => {
+        let mac = int.root_mac;
+        if (!mac && this._hass) {
+          mac = HaHelper.autoDetectRootMac(this._hass, int.config_entry_id) || '';
+        }
+        return { ...int, root_mac: mac || '' };
+      });
+
+      // Determine master_root_mac: use explicit config, or is_master, or first integration
+      let masterMac = this._config.master_root_mac;
+      if (!masterMac && resolvedIntegrations.length > 0) {
+        const masterInt = resolvedIntegrations.find((i) => i.is_master) || resolvedIntegrations[0];
+        masterMac = masterInt?.root_mac || '';
+      }
+
+      const fetchResult = await HaHelper.fetchClients(this._hass, resolvedIntegrations);
       this._diagnostics = fetchResult.diagnostics;
 
       const graphData = TopologyEngine.buildGraph({
-        masterRootMac: this._config.master_root_mac,
-        integrations: integrations,
+        masterRootMac: masterMac || '',
+        integrations: resolvedIntegrations,
         clientsByConfigEntry: fetchResult.clientsByConfigEntry,
         rootNames: fetchResult.rootNames,
       });
@@ -525,6 +629,14 @@ export class NetworkMapCard extends LitElement {
       const isDark =
         this._hass?.themes?.darkMode ??
         window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      const layoutMode = this._config.layout_mode || 'tree';
+      const isHierarchical = layoutMode === 'tree' || layoutMode === 'horizontal';
+
+      if (this._network && this._currentLayoutMode !== layoutMode) {
+        this._currentLayoutMode = layoutMode;
+        this._network.setOptions(this._buildNetworkOptions(isDark, layoutMode));
+      }
 
       // Filter offline devices if toggle is off
       let nodesToDisplay = graphData.nodes;
@@ -558,8 +670,56 @@ export class NetworkMapCard extends LitElement {
         );
       }
 
-      // Transform nodes: all nodes free to arrange organically with ample spacing
+      // Radial positions calculation for 'radial' mode
+      const childrenMap = new Map<string, string[]>();
+      for (const edge of edgesToDisplay) {
+        if (!childrenMap.has(edge.from)) {
+          childrenMap.set(edge.from, []);
+        }
+        childrenMap.get(edge.from)!.push(edge.to);
+      }
+
+      const masterNode =
+        nodesToDisplay.find((n) => n.isMasterRoot) ||
+        nodesToDisplay.find((n) => n.isRoot) ||
+        nodesToDisplay[0];
+      const masterId = masterNode?.id;
+
+      const initialPositions = new Map<string, { x: number; y: number }>();
+      if (!isHierarchical && masterId) {
+        initialPositions.set(masterId, { x: 0, y: 0 });
+
+        const directChildren = childrenMap.get(masterId) || [];
+        const dirCount = Math.max(1, directChildren.length);
+
+        directChildren.forEach((childId, i) => {
+          const angle = (i / dirCount) * 2 * Math.PI - Math.PI / 2;
+          const cx = Math.cos(angle) * 150;
+          const cy = Math.sin(angle) * 150;
+          initialPositions.set(childId, { x: cx, y: cy });
+
+          const grandChildren = childrenMap.get(childId) || [];
+          const gcCount = grandChildren.length;
+          grandChildren.forEach((gcId, j) => {
+            const fanAngle =
+              gcCount > 2
+                ? (j / gcCount) * 2 * Math.PI
+                : angle - Math.PI / 4 + (j / gcCount) * (Math.PI / 2);
+            const gcx = cx + Math.cos(fanAngle) * 165;
+            const gcy = cy + Math.sin(fanAngle) * 165;
+            initialPositions.set(gcId, { x: gcx, y: gcy });
+          });
+        });
+      }
+
+      // Transform nodes
       const visNodes = nodesToDisplay.map((node) => {
+        const isMaster = node.isMasterRoot || node.id === masterId;
+        const pos = initialPositions.get(node.id);
+        const fixedConstraint: any = !isHierarchical && isMaster ? { x: true, y: true } : false;
+        const initialX = pos ? pos.x : undefined;
+        const initialY = pos ? pos.y : undefined;
+
         // Special styling for Interface Sub-branch nodes (Clean text, no emoji)
         if (node.isInterface) {
           const isLan = node.connectionType === 'lan';
@@ -572,7 +732,10 @@ export class NetworkMapCard extends LitElement {
             margin: 6,
             borderRadius: 6,
             borderWidth: 1.5,
-            fixed: false, // Tutto libero
+            level: isHierarchical ? node.depth ?? 1 : undefined,
+            x: isHierarchical ? undefined : initialX,
+            y: isHierarchical ? undefined : initialY,
+            fixed: isHierarchical ? false : fixedConstraint,
             color: {
               background: isDark
                 ? isLan
@@ -629,23 +792,13 @@ export class NetworkMapCard extends LitElement {
           size = 9;
         }
 
-        let label = node.isMasterRoot
-          ? `<b>🌐 ${node.label}</b>`
-          : node.isRoot
-          ? `<b>📡 ${node.label}</b>`
-          : `<b>${node.label}</b>`;
+        let label = `<b>${node.label}</b>`;
 
         if (node.ip) {
           label += `\n<i>${node.ip}</i>`;
         }
 
-        const roleDesc = node.isMasterRoot
-          ? '<br/><b>Ruolo: Router Principale (Master)</b>'
-          : node.isRoot
-          ? '<br/><b>Ruolo: Access Point / Nodo</b>'
-          : '';
-
-        const tooltip = `<b>${node.label}</b>${roleDesc}<br/>MAC: ${node.mac}${node.ip ? `<br/>IP: ${node.ip}` : ''}${
+        const tooltip = `<b>${node.label}</b><br/>MAC: ${node.mac}${node.ip ? `<br/>IP: ${node.ip}` : ''}${
           node.connectionType ? `<br/>Tipo: ${node.connectionType.toUpperCase()}` : ''
         }${node.state ? `<br/>Stato: ${node.state}` : ''}`;
 
@@ -657,7 +810,10 @@ export class NetworkMapCard extends LitElement {
           size: size,
           borderWidth: borderWidth,
           color: nodeColor,
-          fixed: false, // Tutto libero
+          level: isHierarchical ? node.depth ?? 0 : undefined,
+          x: isHierarchical ? undefined : initialX,
+          y: isHierarchical ? undefined : initialY,
+          fixed: isHierarchical ? false : fixedConstraint,
           font: {
             multi: 'html',
             color: isDark ? '#e0e0e0' : '#212121',
@@ -674,7 +830,7 @@ export class NetworkMapCard extends LitElement {
         };
       });
 
-      // Transform edges: distanze ampie per evitare sovrapposizioni
+      // Transform edges: no arrows
       const visEdges = edgesToDisplay.map((edge) => {
         const isLan = edge.connectionType === 'lan';
         const isWifi = edge.connectionType === 'wifi';
@@ -682,18 +838,33 @@ export class NetworkMapCard extends LitElement {
         let edgeColor = isDark ? '#555555' : '#bbbbbb';
         let dashes: boolean | number[] = false;
         let width = 1.6;
-        let length = 140; // Distanza LAN aumentata
+        let length = 95;
 
         if (isLan) {
           dashes = false;
           width = 2.2;
           edgeColor = isDark ? '#64b5f6' : '#1976d2';
-          length = 135;
+          length = 90;
         } else if (isWifi) {
           dashes = [5, 5];
           width = 1.4;
           edgeColor = isDark ? '#4db6ac' : '#00897b';
-          length = 180; // Distanza Wi-Fi ampia per cerchio spazioso con molti nodi
+          length = 105;
+        }
+
+        let smoothConfig: any = {
+          enabled: true,
+          type: 'cubicBezier',
+          forceDirection: layoutMode === 'horizontal' ? 'horizontal' : 'vertical',
+          roundness: isLan ? 0.08 : 0.22,
+        };
+
+        if (layoutMode === 'radial') {
+          smoothConfig = {
+            enabled: true,
+            type: 'continuous',
+            roundness: 0.25,
+          };
         }
 
         return {
@@ -704,15 +875,15 @@ export class NetworkMapCard extends LitElement {
           dashes: dashes,
           width: width,
           length: length,
+          arrows: {
+            to: { enabled: false },
+            from: { enabled: false },
+          },
           color: {
             color: edgeColor,
             highlight: 'var(--primary-color, #03a9f4)',
           },
-          smooth: {
-            enabled: true,
-            type: 'continuous',
-            roundness: 0.25,
-          },
+          smooth: smoothConfig,
         };
       });
 
@@ -783,6 +954,19 @@ export class NetworkMapCard extends LitElement {
 
   public getCardSize(): number {
     return 6;
+  }
+
+  public static async getConfigElement(): Promise<HTMLElement> {
+    return document.createElement('network-map-card-editor');
+  }
+
+  public static getStubConfig(): Record<string, any> {
+    return {
+      type: 'custom:network-map-card',
+      title: 'Mappa di Rete',
+      show_offline: true,
+      integrations: [],
+    };
   }
 
   private _copyIntegrationSnippet(id: string, suggestedMac?: string, name?: string): void {
@@ -894,18 +1078,18 @@ export class NetworkMapCard extends LitElement {
           </div>
 
           <div class="role-tag ${isLan ? 'master' : 'ap'}">
-            ${isLan ? '🔌 Interfaccia Cablata (LAN)' : '📶 Interfaccia Wireless (Wi-Fi)'}
+            ${isLan ? 'Interfaccia LAN' : 'Interfaccia Wi-Fi'}
           </div>
 
           <div class="detail-row">
-            <span class="detail-label">Nome Porta / Interfaccia:</span>
+            <span class="detail-label">Interfaccia:</span>
             <span class="detail-value">${node.interfaceName || 'Non specificata'}</span>
           </div>
 
           <div class="detail-row">
-            <span class="detail-label">Natura Collegamento:</span>
+            <span class="detail-label">Tipo:</span>
             <span class="conn-tag ${isLan ? 'lan' : isWifi ? 'wifi' : ''}">
-              ${isLan ? '🔌 LAN Cablata' : isWifi ? '📶 Wi-Fi Wireless' : 'Standard'}
+              ${isLan ? 'LAN' : isWifi ? 'Wi-Fi' : 'Standard'}
             </span>
           </div>
         </div>
@@ -920,9 +1104,9 @@ export class NetworkMapCard extends LitElement {
         </div>
 
         ${node.isMasterRoot
-          ? html`<div class="role-tag master">🌐 Router Principale (Gateway Master)</div>`
+          ? html`<div class="role-tag master">Principale</div>`
           : node.isRoot
-          ? html`<div class="role-tag ap">📡 Access Point / Nodo Secondario</div>`
+          ? html`<div class="role-tag ap">Secondaria</div>`
           : ''}
 
         <div class="detail-row">

@@ -1,6 +1,8 @@
 export interface IntegrationConfig {
   config_entry_id: string;
-  root_mac: string;
+  root_mac?: string;
+  name?: string;
+  is_master?: boolean; // Se true, questa integrazione è il router principale
   mac_attribute?: string; // (Opzionale) se presente negli attributi
   link_attribute?: string; // (Opzionale) porta o canale wifi
   lan_values?: string[] | string; // Valori dell'attributo porta da considerare LAN (es. ['LAN1', 'LAN2', 'eth0'])
@@ -10,7 +12,8 @@ export interface IntegrationConfig {
 export interface NetworkMapCardConfig {
   type: string;
   title?: string;
-  master_root_mac: string;
+  layout_mode?: 'tree' | 'radial' | 'horizontal'; // Stile del grafo
+  master_root_mac?: string; // Opzionale: dedotto automaticamente dalla prima integrazione o dall'integrazione con is_master: true
   // Ora supporta sia un'integrazione singola che un array
   integrations?: IntegrationConfig[];
   // Supporto rapido per testare una singola integrazione diretta
@@ -21,6 +24,7 @@ export interface NetworkMapCardConfig {
   lan_values?: string[] | string;
   wifi_values?: string[] | string;
   height?: string;
+  show_offline?: boolean;
   debug?: boolean; // Opzione per mostrare info di debug a schermo
 }
 
@@ -38,6 +42,7 @@ export interface EntityRegistryEntry {
   device_id?: string | null;
   platform?: string;
   name?: string | null;
+  disabled_by?: string | null;
 }
 
 export interface DeviceRegistryEntry {
@@ -50,6 +55,7 @@ export interface DeviceRegistryEntry {
   manufacturer?: string | null;
   model?: string | null;
   via_device_id?: string | null;
+  disabled_by?: string | null;
 }
 
 export interface HomeAssistant {
