@@ -5,32 +5,48 @@
 > **Non viene fornito supporto attivo, manutenzione o sviluppo di nuove funzionalità su richiesta.**
 > Se desideri apportare modifiche, correzioni o estensioni per il tuo ambiente, **sentiti libero di fare un Fork del repository** e personalizzarlo a tuo piacimento!
 
-Una Custom Lovelace Card per Home Assistant che visualizza dinamicamente la topologia della rete locale sotto forma di grafo interattivo ad albero o costellazione radiale.
+Una Custom Lovelace Card per Home Assistant che visualizza dinamicamente la topologia della rete locale sotto forma di grafo interattivo (**Molecolare**, **Albero**, **Radiale**, **Orizzontale**).
 
-Il componente deduce i collegamenti fisici e logici combinando i dati provenienti dalle integrazioni di rete (es. router principale, access point, switch gestiti), interrogando il `device_registry` e l'`entity_registry` di Home Assistant, escludendo automaticamente i dispositivi disattivati, estraendo i MAC address hardware dalle connessioni e risolvendo i conflitti di connessione tramite un algoritmo a profondità massima (**Max-Depth Edge Resolution**).
+Il componente deduce i collegamenti fisici e logici combinando i dati provenienti dalle integrazioni di rete (es. router principale, access point, switch gestiti), interrogando il `device_registry` e l'`entity_registry` di Home Assistant, escludendo automaticamente i dispositivi disattivati, dando precedenza assoluta allo stato online nella deduplicazione dei MAC address e risolvendo i percorsi multi-hop tramite profondità topologica (**Max-Depth Edge Resolution**).
 
 ---
 
 ## Caratteristiche
 
+*   **4 Stili di Grafo Selezionabili (`layout_mode`):**
+    *   **Molecolare (`molecular` - Predefinito):** Disposizione organica a scheletro portante rigido (router e interfacce a distanze calibrate e stabili) con dispositivi client mobili all'esterno. Mantiene sgombra l'area centrale inter-apparato ed è nativamente predisposto per topologie multi-router.
+    *   **Albero (`tree`):** Gerarchia verticale classica ordinata dall'alto verso il basso.
+    *   **Radiale (`radial`):** Disposizione organica a raggiera attorno al router master.
+    *   **Orizzontale (`horizontal`):** Flusso gerarchico da sinistra verso destra, ideale per schermi ultra-wide o pannelli orizzontali.
+    *   *Selezionabile dall'Editor Visuale o ciclabile con 1 click direttamente dal pulsante layout della mappa.*
+
 *   **Configurazione Completamente Visuale (Card Editor GUI):**
     *   **Nessun YAML Richiesto:** Puoi configurare l'intera scheda direttamente dall'interfaccia grafica di modifica scheda di Home Assistant.
-    *   **Selezione Automatica Router Principale:** La prima integrazione aggiunta viene impostata automaticamente come principale, oppure puoi scegliere quale apparato è il gateway master tramite radio button. Non serve digitare manualmente l'indirizzo MAC.
-    *   **Scansione Intelligente di Tutti i Dispositivi:** Analizza tutte le entità associate all'integrazione per individuare gli attributi disponibili (es. porta o canale).
+    *   **Selezione Router Principale (Gateway):** Campo dedicato per impostare o verificare il `master_root_mac`, con pulsanti rapidi pre-popolati con i MAC rilevati da Home Assistant.
+    *   **Riconoscimento Server Home Assistant:** Menu a tendina per selezionare quale dispositivo ospita il server Home Assistant, evidenziato sulla mappa con l'icona ufficiale nativa azzurra.
+    *   **Scansione Intelligente dei Dispositivi:** Analizza tutte le entità per individuare gli attributi disponibili (porta o canale).
     *   **Classificazione LAN vs Wi-Fi con 1 Click:** Rileva tutti i valori reali di porta e canale presenti sui dispositivi (es. `LAN 1`, `5 GHz`, `2.4 GHz`) e permette di classificarli in LAN o Wi-Fi con chip interattivi.
-*   **Stili di Grafo Selezionabili (`layout_mode`):**
-    *   **Albero (Dall'alto verso il basso - Default):** Disposizione gerarchica compatta e ordinata con il router principale in cima e le interfacce e dispositivi che scendono a pettine.
-    *   **Costellazione Radiale (A raggiera):** Disposizione organica circolare con fisica 2D centrata attorno al router principale.
-    *   **Albero Orizzontale (Da sinistra a destra):** Flusso orizzontale ideale per schermi ultra-wide o pannelli orizzontali.
-*   **Sottorami Distinti per Ogni Interfaccia di Rete:**
-    *   Nodi intermediari puliti per ciascuna porta o canale specificato (es. `LAN 1`, `5 GHz`, `2.4 GHz`) o generico se non indicato.
-*   **Linee Senza Frecce:** Collegamenti puliti senza frecce direzionali superflue (linee continue per la LAN, tratteggiate per il Wi-Fi).
-*   **Layout Fluido e Responsive:**
-    *   Altezza elastica automatica basata sullo schermo (`min(70vh, 650px)`) con `ResizeObserver` che adatta la vista al cambio di orientamento su smartphone, tablet e PC.
-*   **Filtro Dispositivi Offline:** Pulsante rapido in testata (`Mostra/Nascondi offline`) per pulire al volo la mappa.
-*   **Esclusione Dispositivi Disattivati:** Rileva ed esclude automaticamente qualsiasi dispositivo o entità disattivata in Home Assistant (`disabled_by`).
-*   **Dettagli Interattivi al Click:** Cassetto laterale con dettagli completi (IP, MAC, porta/canale, stato) e pulsante per aprire la scheda entità nativa di Home Assistant (`hass-more-info`).
-*   **Zoom Controls:** Controlli on-screen `+`, `−`, `⛶` (adatta alla finestra) e rotellina del mouse calibrata per uno zoom morbido e progressivo.
+    *   **Verifica MAC per Singola Integrazione:** Possibilità di confermare o personalizzare il `root_mac` di ciascun apparato.
+
+*   **Dettagli Completi e Interattivi al Click (Drawer Laterale):**
+    *   **Percorso di Rete Fisico a Breadcrumb (`A > B > C`):** Visualizzazione compatta a sviluppo orizzontale dei soli apparati fisici dal Gateway al dispositivo (es. `Router Gateway > Access Point > Dispositivo`), escludendo le interfacce intermedie per la massima leggibilità, con pillole interattive cliccabili per mettere a fuoco la mappa.
+    *   **Informazioni Comuni Consolidate:** Indirizzo IP e MAC address con pulsanti di copia rapida negli appunti, stato di connessione e tipo di interfaccia.
+    *   **Multi-Integrazione con Nome Entità e Dispositivo:** Schede separate per ciascuna integrazione che traccia lo stesso dispositivo, riportando sia il **Nome entità** (friendly name) che il nome del **Dispositivo** fisico (se diversi), l'ID entità esatto, lo stato (`home`/`not_home`), la porta/canale, parametri Wi-Fi (dBm, Mbps) e pulsante per aprire direttamente la scheda nativa dell'entità in Home Assistant (`hass-more-info`).
+    *   **Protezione Overflow Orizzontale:** Gestione dinamica dei testi lunghi (nomi host o ID entità complessi) con a capo automatico fluido riga per riga, prevenendo qualsiasi barra di scorrimento orizzontale.
+    *   **Design Tipografico Pulito:** Interfaccia priva di icone o emoji decorative superflue, basata sui token grafici del tema nativo di Home Assistant.
+
+*   **Motore Topologico Intelligente:**
+    *   **Priorità Stato Online:** Quando più integrazioni rilevano lo stesso MAC address, la priorità di associazione all'interfaccia viene data al dispositivo online (`home`/`connected`), evitando che client attivi vengano agganciati a record storici o offline.
+    *   **Risoluzione Max-Depth:** Se entrambi i record sono online o entrambi offline, il client viene collegato al nodo a profondità topologica maggiore (l'access point o switch fisico più vicino).
+    *   **Ordinamento Alfabetico Naturale:** Tutte le interfacce di rete (LAN, Wi-Fi 2.4 GHz, Wi-Fi 5 GHz, ecc.) sono ordinate alfanumericamente in senso orario o da sinistra a destra.
+    *   **Esclusione Dispositivi Disattivati:** Rileva ed esclude automaticamente qualsiasi dispositivo o entità disattivata in Home Assistant (`disabled_by !== null`).
+
+*   **Interfaccia Grafica e Canvas:**
+    *   **Adattamento Automatico al 100% dello Spazio:** La scheda riempie automaticamente tutto lo spazio orizzontale e verticale fornito dal contenitore esterno (viste a pannello, griglie o masonry), adattandosi in tempo reale grazie a `ResizeObserver`.
+    *   **Canvas Full-Bleed:** Titolo e barre superiori rimosse per lasciare il 100% dell'area visiva al grafo della rete.
+    *   **Linee Senza Frecce:** Collegamenti puliti senza frecce direzionali superflue (linee continue per la LAN, tratteggiate per il Wi-Fi).
+    *   **Controlli Fluttuanti Integrati:** Pulsanti on-screen in basso a sinistra: `+` (zoom in), `−` (zoom out), `⛶` (adatta schermo), **icona layout** (rotazione al volo tra Molecolare, Albero, Radiale e Orizzontale) e **icona occhio** (per mostrare/nascondere temporaneamente i dispositivi offline).
+    *   **Persistenza al Cambio Scheda:** Riaggancio istantaneo del canvas e ripopolamento automatico quando si naviga tra le schede della dashboard (`connectedCallback`), con auto-fit morbido allo stabilizzarsi della fisica.
 
 ---
 
@@ -39,8 +55,12 @@ Il componente deduce i collegamenti fisici e logici combinando i dati provenient
 ### Tramite HACS (Home Assistant Community Store)
 1. In Home Assistant, apri **HACS** > **Frontend**.
 2. Clicca sui tre puntini in alto a destra > **Repository personalizzati**.
-3. Inserisci l'URL di questo repository e seleziona la categoria **Lovelace**.
-4. Clicca su **Scarica**.
+3. Inserisci l'URL del repository:
+   ```text
+   https://github.com/ld-vladeck/ha-network-map-card
+   ```
+4. Seleziona la categoria **Lovelace**.
+5. Clicca su **Scarica**.
 
 ### Installazione Manuale
 1. Copia il file compilato `dist/network-map-card.js` nella cartella `config/www/` di Home Assistant.
@@ -57,11 +77,12 @@ Il componente deduce i collegamenti fisici e logici combinando i dati provenient
 Non serve scrivere codice YAML:
 1. Nella tua plancia Lovelace, clicca su **Modifica plancia** > **+ Aggiungi scheda**.
 2. Cerca **"Network Map Card"**.
-3. Scegli lo **Stile del grafo** desiderato (*Albero*, *Costellazione radiale*, *Albero orizzontale*).
-4. Nel menu a tendina seleziona l'integrazione di rete da aggiungere (es. l'integrazione del router principale) e clicca **Aggiungi**.
-5. Seleziona l'attributo che indica la porta o canale e clicca su **LAN** o **Wi-Fi** accanto a ciascun valore rilevato.
-6. Aggiungi le eventuali altre integrazioni secondarie (es. Access Point o Switch di rete).
-7. Salva la scheda.
+3. Scegli lo **Stile del grafo** desiderato (*Molecolare*, *Albero*, *Radiale*, *Orizzontale*).
+4. Nel campo **MAC Router Principale (Gateway)** conferma o seleziona il MAC del tuo router primario.
+5. Seleziona l'eventuale **Dispositivo Home Assistant** per mostrare l'icona ufficiale.
+6. Aggiungi le integrazioni di rete da visualizzare (es. router principale, access point, switch).
+7. Per ciascuna integrazione, seleziona l'attributo che indica la porta o canale e clicca su **LAN** o **Wi-Fi** accanto a ciascun valore rilevato.
+8. Salva la scheda.
 
 ---
 
@@ -71,9 +92,10 @@ Se preferisci configurarla in modalità YAML, ecco un esempio completo:
 
 ```yaml
 type: custom:network-map-card
-title: "Mappa di Rete"
-layout_mode: tree # Opzioni: tree (default), radial, horizontal
-show_offline: true # true = mostra anche i dispositivi disconnessi
+layout_mode: molecular # Opzioni: molecular (default), tree, radial, horizontal
+master_root_mac: "AA:BB:CC:11:22:33" # Opzionale: MAC del router gateway principale (auto-rilevato se omesso)
+homeassistant_mac: "B8:27:EB:44:55:66" # Opzionale: MAC del server Home Assistant (mostra icona dedicata)
+show_offline: true # true = mostra inizialmente i dispositivi offline (default: true)
 
 integrations:
   # Integrazione 1: Router Principale / Gateway
@@ -95,10 +117,10 @@ integrations:
 | Parametro | Tipo | Descrizione | Default |
 | :--- | :--- | :--- | :--- |
 | `type` | string | Obbligatorio: `custom:network-map-card` | - |
-| `title` | string | Titolo visualizzato nella testata della scheda | `"Mappa di Rete"` |
-| `layout_mode` | string | Stile di layout: `tree` (albero top-down), `radial` (costellazione), `horizontal` (albero orizzontale) | `"tree"` |
-| `height` | string | Altezza personalizzata CSS (es. `"500px"`, `"60vh"`). Se omesso, è automatico e responsive. | `min(70vh, 650px)` |
-| `show_offline` | boolean | Mostra inizialmente i dispositivi offline sulla mappa | `true` |
+| `layout_mode` | string | Stile di layout: `molecular` (predefinito), `tree`, `radial`, `horizontal` | `"molecular"` |
+| `master_root_mac` | string | MAC del router principale/gateway (livello 0). Se omesso, è auto-rilevato. | Auto-rilevato |
+| `homeassistant_mac` | string | MAC del dispositivo che ospita Home Assistant (mostra icona dedicata) | - |
+| `show_offline` | boolean | Mostra inizialmente i dispositivi offline sulla mappa (toggled da icona occhio) | `true` |
 | `integrations` | list | Elenco delle integrazioni di rete da visualizzare | `[]` |
 
 #### Opzioni per Singola Integrazione (`integrations`)

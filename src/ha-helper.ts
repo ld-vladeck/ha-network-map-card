@@ -352,12 +352,18 @@ export class HaHelper {
           linkInfo = String(entityState.attributes[integration.link_attribute]);
         }
 
+        const entityName =
+          primaryEntity?.name ||
+          entityState?.attributes?.friendly_name ||
+          entityState?.attributes?.host_name ||
+          undefined;
+
         const devName =
           dev.name_by_user ||
           dev.name ||
-          entityState?.attributes?.friendly_name ||
-          entityState?.attributes?.host_name ||
-          clientMac;
+          undefined;
+
+        const resolvedPrimaryName = entityName || devName || clientMac;
 
         const ip =
           entityState?.attributes?.ip ||
@@ -378,7 +384,9 @@ export class HaHelper {
 
         targetList.push({
           mac: clientMac,
-          name: devName,
+          name: resolvedPrimaryName,
+          entityName: entityName,
+          deviceName: devName,
           ip: ip,
           state: rawState,
           isConnected: isConnected,

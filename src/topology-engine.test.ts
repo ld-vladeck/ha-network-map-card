@@ -108,4 +108,147 @@ describe('TopologyEngine', () => {
     const pcEdge = result.edges.find((e) => e.to === pcMac);
     expect(pcEdge).toBeDefined();
   });
+
+  it('prioritizes online candidate over offline candidate regardless of depth', () => {
+    const routerMac = '00:00:00:00:00:01';
+    const apMac = '00:00:00:00:00:02';
+    const deviceMac = 'cc:cc:cc:dd:ee:ff';
+
+    const integrations: IntegrationConfig[] = [
+      {
+        config_entry_id: 'router_id',
+        root_mac: routerMac,
+        lan_values: ['LAN 1', 'LAN 2'],
+      },
+      {
+        config_entry_id: 'ap_id',
+        root_mac: apMac,
+        wifi_values: ['5 GHz'],
+      },
+    ];
+
+    // AP is connected to router on LAN 1
+    const routerClients: DiscoveredClient[] = [
+      {
+        mac: apMac,
+        name: 'Access Point',
+        linkInfo: 'LAN 1',
+        isConnected: true,
+      },
+      // Router sees device ONLINE on LAN 2
+      {
+        mac: deviceMac,
+        name: 'Device Mario (Router Online)',
+        linkInfo: 'LAN 2',
+        isConnected: true,
+        state: 'home',
+      },
+    ];
+
+    // AP has an old stale cache entry seeing device OFFLINE on 5 GHz
+    const apClients: DiscoveredClient[] = [
+      {
+        mac: deviceMac,
+        name: 'Device Mario (AP Offline)',
+        linkInfo: '5 GHz',
+        isConnected: false,
+        state: 'not_home',
+      },
+    ];
+
+    const clientsMap = new Map<string, DiscoveredClient[]>();
+    clientsMap.set('router_id', routerClients);
+    clientsMap.set('ap_id', apClients);
+
+    const result = TopologyEngine.buildGraph({
+      masterRootMac: routerMac,
+      integrations,
+      clientsByConfigEntry: clientsMap,
+    });
+
+    // Device should be attached to Router LAN 2 (online), NOT to AP 5 GHz (offline), even though AP has higher depth!
+    const deviceEdge = result.edges.find((e) => e.to === deviceMac);
+    expect(deviceEdge).toBeDefined();
+
+    const lan2Interface = result.nodes.find((n) => n.isInterface && n.interfaceName === 'LAN 2');
+    const wifiInterface = result.nodes.find((n) => n.isInterface && n.interfaceName === '5 GHz');
+
+    expect(deviceEdge?.from).toBe(lan2Interface?.id);
+    expect(deviceEdge?.from).not.toBe(wifiInterface?.id);
+
+    // Device node should be online
+    const deviceNode = result.nodes.find((n) => n.mac === deviceMac);
+    expect(deviceNode?.isConnected).toBe(true);
+    expect(deviceNode?.state).toBe('home');
+  });
+
+  it('collects entity sources from multiple integrations discovering the same device MAC', () => {
+    const routerMac = '00:00:00:00:00:01';
+    const apMac = '00:00:00:00:00:02';
+    const phoneMac = 'aa:bb:cc:dd:ee:01';
+
+    const integrations: IntegrationConfig[] = [
+      {
+        config_entry_id: 'router_id',
+        root_mac: routerMac,
+        name: 'Router Principale',
+        lan_values: ['LAN 1'],
+      },
+      {
+        config_entry_id: 'ap_id',
+        root_mac: apMac,
+        name: 'Access Point',
+        wifi_values: ['5 GHz'],
+      },
+    ];
+
+    const routerClients: DiscoveredClient[] = [
+      {
+        mac: phoneMac,
+        name: 'iPhone Mario (Router)',
+        entityId: 'device_tracker.iphone_router',
+        ip: '192.168.1.150',
+        linkInfo: 'LAN 1',
+        isConnected: true,
+        state: 'home',
+      },
+    ];
+
+    const apClients: DiscoveredClient[] = [
+      {
+        mac: phoneMac,
+        name: 'iPhone Mario (AP)',
+        entityId: 'device_tracker.iphone_ap',
+        ip: '192.168.1.150',
+        linkInfo: '5 GHz',
+        isConnected: true,
+        state: 'home',
+        attributes: { signal: -55, rate: '433 Mbps' },
+      },
+    ];
+
+    const clientsMap = new Map<string, DiscoveredClient[]>();
+    clientsMap.set('router_id', routerClients);
+    clientsMap.set('ap_id', apClients);
+
+    const result = TopologyEngine.buildGraph({
+      masterRootMac: routerMac,
+      integrations,
+      clientsByConfigEntry: clientsMap,
+    });
+
+    const phoneNode = result.nodes.find((n) => n.mac === phoneMac);
+    expect(phoneNode).toBeDefined();
+    expect(phoneNode?.sources).toBeDefined();
+    expect(phoneNode?.sources?.length).toBe(2);
+
+    const routerSource = phoneNode?.sources?.find((s) => s.integrationId === 'router_id');
+    expect(routerSource?.entityId).toBe('device_tracker.iphone_router');
+    expect(routerSource?.linkInfo).toBe('LAN 1');
+
+    const apSource = phoneNode?.sources?.find((s) => s.integrationId === 'ap_id');
+    expect(apSource?.entityId).toBe('device_tracker.iphone_ap');
+    expect(apSource?.linkInfo).toBe('5 GHz');
+    expect(apSource?.attributes?.signal).toBe(-55);
+  });
 });

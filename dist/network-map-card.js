@@ -17040,14 +17040,16 @@ var pF = class {
 				if (!d) continue;
 				let f;
 				n.link_attribute && l?.attributes?.[n.link_attribute] !== void 0 && (f = String(l.attributes[n.link_attribute]));
-				let p = t.name_by_user || t.name || l?.attributes?.friendly_name || l?.attributes?.host_name || d, m = l?.attributes?.ip || l?.attributes?.ip_address || l?.attributes?.ipv4, h = l?.state, g = !l || h === "home" || h === "on" || h === "connected", _ = fF(f, l?.attributes, n.lan_values, n.wifi_values);
+				let p = c?.name || l?.attributes?.friendly_name || l?.attributes?.host_name || void 0, m = t.name_by_user || t.name || void 0, h = p || m || d, g = l?.attributes?.ip || l?.attributes?.ip_address || l?.attributes?.ipv4, _ = l?.state, v = !l || _ === "home" || _ === "on" || _ === "connected", y = fF(f, l?.attributes, n.lan_values, n.wifi_values);
 				a.push({
 					mac: d,
-					name: p,
-					ip: m,
-					state: h,
-					isConnected: g,
-					connectionType: _,
+					name: h,
+					entityName: p,
+					deviceName: m,
+					ip: g,
+					state: _,
+					isConnected: v,
+					connectionType: y,
 					entityId: c?.entity_id,
 					deviceId: t.id,
 					linkInfo: f,
@@ -17117,134 +17119,164 @@ function mF(e) {
 }
 var hF = class {
 	static buildGraph(e) {
-		let t = uF(e.masterRootMac), n = /* @__PURE__ */ new Map(), r = /* @__PURE__ */ new Set(), i = e.rootNames || /* @__PURE__ */ new Map();
-		for (let a of e.integrations) {
-			let e = uF(a.root_mac);
-			if (e && (r.add(e), !n.has(e))) {
-				let r = i.get(e) || a.name || e;
-				n.set(e, {
+		let t = uF(e.masterRootMac), n = uF(e.homeassistantMac), r = /* @__PURE__ */ new Map(), i = /* @__PURE__ */ new Set(), a = e.rootNames || /* @__PURE__ */ new Map();
+		for (let o of e.integrations) {
+			let e = uF(o.root_mac);
+			if (e && (i.add(e), !r.has(e))) {
+				let i = a.get(e) || o.name || e;
+				r.set(e, {
 					id: e,
-					label: r,
+					label: i,
 					mac: e,
 					isRoot: !0,
 					isMasterRoot: e === t,
+					isHomeAssistant: !!(n && e === n),
 					depth: e === t ? 0 : void 0
 				});
 			}
 		}
-		if (t && !n.has(t)) {
-			r.add(t);
-			let e = i.get(t) || t;
-			n.set(t, {
+		if (t && !r.has(t)) {
+			i.add(t);
+			let e = a.get(t) || t;
+			r.set(t, {
 				id: t,
 				label: e,
 				mac: t,
 				isRoot: !0,
 				isMasterRoot: !0,
+				isHomeAssistant: !!(n && t === n),
 				depth: 0
 			});
 		}
-		let a = /* @__PURE__ */ new Map(), o = /* @__PURE__ */ new Map();
-		for (let s of e.integrations) {
-			let c = uF(s.root_mac), l = e.clientsByConfigEntry.get(s.config_entry_id) || [];
-			for (let e of l) {
-				let l = uF(e.mac);
-				if (!l || l === c) continue;
-				let u = e.linkInfo ? String(e.linkInfo).trim() : "", d = fF(u || void 0, e.attributes, s.lan_values, s.wifi_values);
-				u ||= d === "lan" ? "LAN" : d === "wifi" ? "Wi-Fi" : "Rete";
-				let f = mF(u), p = `if_${c}_${f}`;
-				if (!n.has(p)) {
-					let e = u;
-					n.set(p, {
-						id: p,
+		let o = /* @__PURE__ */ new Map(), s = /* @__PURE__ */ new Map();
+		for (let c of e.integrations) {
+			let l = uF(c.root_mac), u = e.clientsByConfigEntry.get(c.config_entry_id) || [], d = a.get(l) || c.name || "Integrazione";
+			for (let e of u) {
+				let u = uF(e.mac);
+				if (!u || u === l) continue;
+				let f = e.linkInfo ? String(e.linkInfo).trim() : "", p = fF(f || void 0, e.attributes, c.lan_values, c.wifi_values);
+				f ||= p === "lan" ? "LAN" : p === "wifi" ? "Wi-Fi" : "Rete";
+				let m = mF(f), h = `if_${l}_${m}`;
+				if (!r.has(h)) {
+					let e = f;
+					r.set(h, {
+						id: h,
 						label: e,
-						mac: `${c}_${f}`,
+						mac: `${l}_${m}`,
 						isInterface: !0,
-						interfaceName: u,
-						connectionType: d
+						interfaceName: f,
+						connectionType: p
 					});
-					let t = `${c}->${p}`;
-					a.set(t, {
-						from: c,
-						to: p,
-						connectionType: d
+					let t = `${l}->${h}`;
+					o.set(t, {
+						from: l,
+						to: h,
+						connectionType: p
 					});
 				}
-				let m = n.get(l);
-				m ? (!i.has(l) && (m.label === "Router Principale" || m.label.startsWith("Access Point (") || m.label === l) && e.name && e.name !== l && (m.label = e.name), !m.ip && e.ip && (m.ip = e.ip), !m.entityId && e.entityId && (m.entityId = e.entityId), e.state !== void 0 && (m.state = e.state, m.isConnected = e.isConnected), d !== "unknown" && (m.connectionType = d)) : n.set(l, {
-					id: l,
-					label: e.name || l,
-					mac: l,
+				let g = {
+					integrationId: c.config_entry_id,
+					integrationName: d,
+					name: e.entityName || e.name,
+					deviceName: e.deviceName,
+					entityId: e.entityId,
+					state: e.state,
+					isConnected: e.isConnected,
+					linkInfo: e.linkInfo,
+					ip: e.ip,
+					attributes: e.attributes
+				}, _ = !!(n && u === n), v = r.get(u);
+				v ? (_ && (v.isHomeAssistant = !0), v.sources ||= [], v.sources.some((e) => e.integrationId === g.integrationId) || v.sources.push(g), !a.has(u) && (v.label === "Router Principale" || v.label.startsWith("Access Point (") || v.label === u) && e.name && e.name !== u && (v.label = e.name), !v.ip && e.ip && (v.ip = e.ip), !v.entityId && e.entityId && (v.entityId = e.entityId), e.state !== void 0 && (v.state = e.state, v.isConnected = e.isConnected), p !== "unknown" && (v.connectionType = p)) : r.set(u, {
+					id: u,
+					label: e.name || u,
+					mac: u,
 					ip: e.ip,
 					state: e.state,
 					isConnected: e.isConnected,
-					connectionType: d,
-					isRoot: r.has(l),
-					isMasterRoot: l === t,
+					connectionType: p,
+					isRoot: i.has(u),
+					isMasterRoot: u === t,
+					isHomeAssistant: _,
 					entityId: e.entityId,
-					rawAttributes: e.attributes
-				}), o.has(l) || o.set(l, []), o.get(l).push({
-					from: p,
-					to: l,
-					connectionType: d,
-					rootMac: c
+					rawAttributes: e.attributes,
+					sources: [g]
+				}), s.has(u) || s.set(u, []), s.get(u).push({
+					from: h,
+					to: u,
+					connectionType: p,
+					rootMac: l,
+					isConnected: e.isConnected,
+					client: e
 				});
 			}
 		}
-		let s = /* @__PURE__ */ new Map();
-		for (let e of r) s.set(e, []);
-		for (let e of r) {
-			let t = o.get(e) || [];
-			for (let n of t) s.has(n.rootMac) && s.get(n.rootMac).push(e);
-		}
 		let c = /* @__PURE__ */ new Map();
-		c.set(t, 0);
-		let l = [{
+		for (let e of i) c.set(e, []);
+		for (let e of i) {
+			let t = s.get(e) || [];
+			for (let n of t) c.has(n.rootMac) && c.get(n.rootMac).push(e);
+		}
+		let l = /* @__PURE__ */ new Map();
+		l.set(t, 0);
+		let u = [{
 			mac: t,
 			depth: 0
-		}], u = /* @__PURE__ */ new Set([t]);
-		for (; l.length > 0;) {
-			let e = l.shift();
-			c.set(e.mac, e.depth);
-			let t = s.get(e.mac) || [];
-			for (let n of t) u.has(n) || (u.add(n), l.push({
+		}], d = /* @__PURE__ */ new Set([t]);
+		for (; u.length > 0;) {
+			let e = u.shift();
+			l.set(e.mac, e.depth);
+			let t = c.get(e.mac) || [];
+			for (let n of t) d.has(n) || (d.add(n), u.push({
 				mac: n,
 				depth: e.depth + 2
 			}));
 		}
-		for (let e of r) {
-			c.has(e) || c.set(e, 0);
-			let t = n.get(e);
-			t && (t.depth = c.get(e));
+		for (let e of i) {
+			l.has(e) || l.set(e, 0);
+			let t = r.get(e);
+			t && (t.depth = l.get(e));
 		}
-		for (let e of a.values()) {
-			let t = c.get(e.from) ?? 0, r = n.get(e.to);
-			r && (r.depth = t + 1);
+		for (let e of o.values()) {
+			let t = l.get(e.from) ?? 0, n = r.get(e.to);
+			n && (n.depth = t + 1);
 		}
-		let d = [], f = /* @__PURE__ */ new Set();
-		for (let [e, t] of o.entries()) {
-			let r = t[0], i = n.get(r.from)?.depth ?? 0;
+		let f = [], p = /* @__PURE__ */ new Set();
+		for (let [e, t] of s.entries()) {
+			let n = t[0];
 			for (let e = 1; e < t.length; e++) {
-				let a = t[e], o = n.get(a.from)?.depth ?? 0;
-				o > i && (i = o, r = a);
+				let i = t[e], a = i.isConnected !== !1, o = n.isConnected !== !1;
+				(a && !o || (a || !o) && (r.get(i.from)?.depth ?? 0) > (r.get(n.from)?.depth ?? 0)) && (n = i);
 			}
-			d.push({
-				from: r.from,
-				to: r.to,
-				connectionType: r.connectionType
-			}), f.add(r.from);
-			let a = n.get(e);
-			a && (a.depth = i + 1, r.connectionType && r.connectionType !== "unknown" && (a.connectionType = r.connectionType));
+			f.push({
+				from: n.from,
+				to: n.to,
+				connectionType: n.connectionType
+			}), p.add(n.from);
+			let i = r.get(e);
+			i && (i.depth = (r.get(n.from)?.depth ?? 0) + 1, n.connectionType && n.connectionType !== "unknown" && (i.connectionType = n.connectionType), n.client && (n.client.state !== void 0 && (i.state = n.client.state, i.isConnected = n.client.isConnected), n.client.ip && (i.ip = n.client.ip), n.client.entityId && (i.entityId = n.client.entityId)));
 		}
-		for (let e of a.values()) f.has(e.to) && d.push(e);
+		for (let e of o.values()) p.has(e.to) && f.push(e);
+		let m = Array.from(r.values()).filter((e) => e.isRoot ? !0 : !e.isInterface || p.has(e.id));
+		if (e.forcedLinks) for (let t of e.forcedLinks) {
+			let e = resolveMac(t.from), n = resolveMac(t.to);
+			if (e && n && e !== n) {
+				let r = f.findIndex((e) => e.to === n);
+				r !== -1 && f.splice(r, 1), f.push({
+					from: e,
+					to: n,
+					label: t.label,
+					connectionType: t.connection_type || "lan"
+				});
+			}
+		}
 		return {
-			nodes: Array.from(n.values()).filter((e) => e.isRoot ? !0 : !e.isInterface || f.has(e.id)),
-			edges: d
+			nodes: m,
+			edges: f
 		};
 	}
 }, gF = class extends Le {
 	constructor(...e) {
-		super(...e), this._availableIntegrations = [], this._selectedIntegrationToAdd = "", this._expandedIntegrations = /* @__PURE__ */ new Set([0]);
+		super(...e), this._availableIntegrations = [], this._allDiscoveredDevices = [], this._selectedIntegrationToAdd = "", this._expandedIntegrations = /* @__PURE__ */ new Set([0]);
 	}
 	static {
 		this.styles = o`
@@ -17457,8 +17489,48 @@ var hF = class {
 		if (this._hass) try {
 			await pF.fetchClients(this._hass, []);
 			let e = await pF.fetchClients(this._hass, this._config?.integrations || []);
-			this._availableIntegrations = e.diagnostics.availableIntegrations, this.requestUpdate();
+			this._availableIntegrations = e.diagnostics.availableIntegrations;
+			let t = /* @__PURE__ */ new Map();
+			for (let n of e.clientsByConfigEntry.values()) for (let e of n) e.mac && !t.has(e.mac) && t.set(e.mac, {
+				mac: e.mac,
+				name: e.name || e.mac,
+				ip: e.ip
+			});
+			this._allDiscoveredDevices = Array.from(t.values()).sort((e, t) => e.name.localeCompare(t.name)), this.requestUpdate();
 		} catch {}
+	}
+	_onHomeAssistantMacChange(e) {
+		if (!this._config) return;
+		let t = e.target;
+		this._config = {
+			...this._config,
+			homeassistant_mac: t.value || void 0
+		}, this._fireConfigChanged();
+	}
+	_onMasterRootMacChange(e) {
+		if (!this._config) return;
+		let t = e.target;
+		this._config = {
+			...this._config,
+			master_root_mac: t.value.trim() || void 0
+		}, this._fireConfigChanged();
+	}
+	_setSuggestedMasterMac(e) {
+		this._config && (this._config = {
+			...this._config,
+			master_root_mac: e
+		}, this._fireConfigChanged(), this.requestUpdate());
+	}
+	_onIntegrationRootMacChange(e, t) {
+		if (!this._config || !this._config.integrations) return;
+		let n = t.target, r = [...this._config.integrations];
+		r[e] = {
+			...r[e],
+			root_mac: n.value.trim() || void 0
+		}, this._config = {
+			...this._config,
+			integrations: r
+		}, this._fireConfigChanged();
 	}
 	_fireConfigChanged() {
 		this._config && this.dispatchEvent(new CustomEvent("config-changed", {
@@ -17585,46 +17657,74 @@ var hF = class {
 	}
 	render() {
 		if (!this._config) return E``;
-		let e = this._config.integrations || [], t = new Set(e.map((e) => e.config_entry_id)), n = this._availableIntegrations.filter((e) => !t.has(e.id));
+		let e = this._config.integrations || [], t = new Set(e.map((e) => e.config_entry_id)), n = this._availableIntegrations.filter((e) => !t.has(e.id)), r = [];
+		for (let e of this._availableIntegrations) e.suggestedRootMac && r.push({
+			label: e.sampleName || e.domain,
+			mac: e.suggestedRootMac
+		});
 		return E`
       <div class="card-config">
         <!-- 1. Generale -->
         <div class="editor-section">
           <div class="section-title">Impostazioni generali</div>
           <div class="form-row">
-            <label>Titolo</label>
-            <input
-              type="text"
-              class="input-text"
-              .value=${this._config.title || ""}
-              @input=${this._onTitleChange}
-              placeholder="Mappa di Rete"
-            />
-          </div>
-          <div class="form-row">
-            <label>Altezza (opzionale, default: responsive)</label>
-            <input
-              type="text"
-              class="input-text"
-              .value=${this._config.height || ""}
-              @input=${this._onHeightChange}
-              placeholder="Auto / Responsive (es. 60vh o 500px)"
-            />
-            <small style="color: var(--secondary-text-color);">
-              Lascia vuoto per adattamento responsive automatico allo schermo (telefono, tablet o PC).
-            </small>
-          </div>
-          <div class="form-row">
             <label>Stile del grafo (Layout)</label>
             <select
               class="select-dropdown"
-              .value=${this._config.layout_mode || "tree"}
+              .value=${this._config.layout_mode || "molecular"}
               @change=${this._onLayoutModeChange}
             >
-              <option value="tree">Albero (Dall'alto verso il basso)</option>
-              <option value="radial">Costellazione radiale (A raggiera)</option>
-              <option value="horizontal">Albero orizzontale (Da sinistra a destra)</option>
+              <option value="molecular">Molecolare</option>
+              <option value="tree">Albero</option>
+              <option value="radial">Radiale</option>
+              <option value="horizontal">Orizzontale</option>
             </select>
+          </div>
+          <div class="form-row">
+            <label>MAC Router Principale / Gateway (Livello 0)</label>
+            <input
+              type="text"
+              class="input-text"
+              .value=${this._config.master_root_mac || ""}
+              @input=${this._onMasterRootMacChange}
+              placeholder="es. AA:BB:CC:DD:EE:FF (opzionale se dedotto dall'integrazione principale)"
+            />
+            ${r.length > 0 ? E`
+                  <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center;">
+                    <span style="font-size: 0.72rem; color: var(--secondary-text-color);">Rilevati:</span>
+                    ${r.map((e) => E`
+                        <button
+                          type="button"
+                          class="chip-btn"
+                          @click=${() => this._setSuggestedMasterMac(e.mac)}
+                          title="Imposta come Router Principale"
+                        >
+                          ${e.label}: ${e.mac}
+                        </button>
+                      `)}
+                  </div>
+                ` : ""}
+            <small style="color: var(--secondary-text-color);">
+              MAC del router principale da cui si dirama l'intera rete.
+            </small>
+          </div>
+          <div class="form-row">
+            <label>Dispositivo Home Assistant (Server)</label>
+            <select
+              class="select-dropdown"
+              .value=${this._config.homeassistant_mac || ""}
+              @change=${this._onHomeAssistantMacChange}
+            >
+              <option value="">-- Nessuno selezionato --</option>
+              ${this._allDiscoveredDevices.map((e) => E`
+                  <option value=${e.mac} ?selected=${e.mac === this._config?.homeassistant_mac}>
+                    ${e.name} ${e.ip ? `(${e.ip})` : `[${e.mac}]`}
+                  </option>
+                `)}
+            </select>
+            <small style="color: var(--secondary-text-color);">
+              Mostra l'icona ufficiale di Home Assistant sulla mappa per il nodo selezionato.
+            </small>
           </div>
           <div class="form-row">
             <label class="checkbox-row">
@@ -17732,6 +17832,21 @@ var hF = class {
                   </label>
                 </div>
 
+                <!-- MAC Apparato -->
+                <div class="form-row">
+                  <label>MAC apparato (Root MAC)</label>
+                  <input
+                    type="text"
+                    class="input-text"
+                    .value=${e.root_mac || ""}
+                    @input=${(e) => this._onIntegrationRootMacChange(t, e)}
+                    placeholder="es. AA:BB:CC:DD:EE:FF (opzionale se auto-rilevato)"
+                  />
+                  <small style="color: var(--secondary-text-color);">
+                    Identificativo MAC dell'apparato (router o access point) per questa integrazione.
+                  </small>
+                </div>
+
                 <!-- Attributo Porta / Canale -->
                 <div class="form-row">
                   <label>Attributo porta o canale</label>
@@ -17789,19 +17904,25 @@ var hF = class {
 customElements.get("network-map-card-editor") || customElements.define("network-map-card-editor", gF);
 //#endregion
 //#region src/network-map-card.ts
-var _F = class extends Le {
+var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistant.io/homeassistant/icon.png", yF = class extends Le {
 	constructor(...e) {
-		super(...e), this._nodesDataSet = new nN([]), this._edgesDataSet = new nN([]), this._currentNodes = [], this._initialized = !1, this._isBuilding = !1, this._lastUpdateTime = 0, this._lastDataSignature = "", this._showIntegrationsList = !0, this._copyNotification = "", this._showOffline = !0, this._currentLayoutMode = "";
+		super(...e), this._nodesDataSet = new nN([]), this._edgesDataSet = new nN([]), this._currentNodes = [], this._initialized = !1, this._isBuilding = !1, this._lastUpdateTime = 0, this._lastDataSignature = "", this._showIntegrationsList = !0, this._copyNotification = "", this._showOffline = !0, this._interfaceChildrenMap = /* @__PURE__ */ new Map(), this._nodeParentMap = /* @__PURE__ */ new Map(), this._currentLayoutMode = "";
 	}
 	static {
 		this.styles = o`
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
     }
     ha-card {
+      flex: 1;
       height: 100%;
       display: flex;
       flex-direction: column;
+      min-height: 0;
       overflow: hidden;
       background: var(--ha-card-background, var(--card-background-color, white));
       color: var(--primary-text-color, #212121);
@@ -17810,34 +17931,6 @@ var _F = class extends Le {
       border-width: var(--ha-card-border-width, 1px);
       border-style: solid;
       border-color: var(--ha-card-border-color, var(--divider-color, #e0e0e0));
-    }
-    .card-header {
-      padding: 14px 16px;
-      font-size: 1.25rem;
-      font-weight: 500;
-      color: var(--primary-text-color);
-      border-bottom: 1px solid var(--divider-color, #e0e0e0);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .header-action-btn {
-      background: none;
-      border: 1px solid var(--divider-color, #d0d0d0);
-      color: var(--primary-text-color, #212121);
-      border-radius: 6px;
-      padding: 4px 10px;
-      font-size: 0.78rem;
-      font-weight: 500;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .header-action-btn:hover {
-      background: rgba(0, 0, 0, 0.05);
-      border-color: var(--primary-color, #0288d1);
     }
     .debug-box {
       padding: 10px 16px;
@@ -17887,8 +17980,9 @@ var _F = class extends Le {
     .card-content-area {
       position: relative;
       width: 100%;
-      height: var(--network-map-height, min(70vh, 650px));
-      min-height: 380px;
+      flex: 1;
+      height: 100%;
+      min-height: min(70vh, 500px);
     }
     .network-container {
       width: 100%;
@@ -17896,6 +17990,8 @@ var _F = class extends Le {
       position: absolute;
       top: 0;
       left: 0;
+      bottom: 0;
+      right: 0;
     }
     .status-overlay {
       position: absolute;
@@ -17913,17 +18009,29 @@ var _F = class extends Le {
       position: absolute;
       top: 14px;
       right: 14px;
-      width: 290px;
+      width: 320px;
+      max-height: calc(100% - 28px);
+      overflow-y: auto;
+      overflow-x: hidden;
       background: var(--ha-card-background, var(--card-background-color, #ffffff));
       color: var(--primary-text-color, #212121);
       border: 1px solid var(--divider-color, #e0e0e0);
-      border-radius: 10px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.22);
       padding: 14px;
       z-index: 10;
-      font-size: 0.88rem;
+      font-size: 0.86rem;
       backdrop-filter: blur(8px);
       animation: fadeIn 0.15s ease-out;
+      scrollbar-width: thin;
+      box-sizing: border-box;
+    }
+    .detail-drawer::-webkit-scrollbar {
+      width: 5px;
+    }
+    .detail-drawer::-webkit-scrollbar-thumb {
+      background: var(--divider-color, #ccc);
+      border-radius: 4px;
     }
     @keyframes fadeIn {
       from {
@@ -17939,13 +18047,13 @@ var _F = class extends Le {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       padding-bottom: 8px;
       border-bottom: 1px solid var(--divider-color, #e0e0e0);
     }
     .detail-title {
       font-weight: 600;
-      font-size: 0.98rem;
+      font-size: 1rem;
       line-height: 1.25;
       word-break: break-word;
     }
@@ -17953,7 +18061,7 @@ var _F = class extends Le {
       background: none;
       border: none;
       cursor: pointer;
-      font-size: 1.2rem;
+      font-size: 1.3rem;
       line-height: 1;
       color: var(--secondary-text-color, #888);
       padding: 0 4px;
@@ -17961,21 +18069,37 @@ var _F = class extends Le {
     .close-btn:hover {
       color: var(--primary-text-color, #111);
     }
+    .detail-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
     .detail-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 8px;
       margin-bottom: 6px;
+      min-width: 0;
     }
     .detail-label {
       color: var(--secondary-text-color, #757575);
       font-size: 0.82rem;
+      flex-shrink: 0;
     }
     .detail-value {
       font-weight: 500;
       font-family: monospace;
       font-size: 0.82rem;
       text-align: right;
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex: 1;
+      min-width: 0;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     .status-badge {
       display: inline-flex;
@@ -18017,9 +18141,8 @@ var _F = class extends Le {
       gap: 4px;
       font-size: 0.76rem;
       font-weight: 700;
-      padding: 3px 8px;
+      padding: 2px 8px;
       border-radius: 6px;
-      margin-bottom: 8px;
     }
     .role-tag.master {
       background: rgba(13, 71, 161, 0.15);
@@ -18030,6 +18153,141 @@ var _F = class extends Le {
       background: rgba(2, 136, 209, 0.15);
       color: #0288d1;
       border: 1px solid rgba(2, 136, 209, 0.3);
+    }
+    .drawer-section {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--divider-color, #e0e0e0);
+    }
+    .drawer-section-title {
+      font-size: 0.74rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--secondary-text-color, #757575);
+      margin-bottom: 8px;
+    }
+    .trace-breadcrumb {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 6px;
+      line-height: 1.4;
+      font-size: 0.8rem;
+    }
+    .trace-pill {
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.04);
+      color: var(--primary-text-color, #212121);
+      transition: background 0.12s, color 0.12s;
+      word-break: break-word;
+    }
+    .trace-pill:hover {
+      background: rgba(2, 136, 209, 0.12);
+      color: var(--primary-color, #0288d1);
+    }
+    .trace-pill.active {
+      font-weight: 600;
+      color: var(--primary-color, #0288d1);
+      background: rgba(2, 136, 209, 0.15);
+    }
+    .trace-separator {
+      color: var(--secondary-text-color, #9e9e9e);
+      font-size: 0.72rem;
+      user-select: none;
+    }
+    .copy-chip {
+      background: none;
+      border: 1px solid var(--divider-color, #ccc);
+      color: var(--primary-text-color, #212121);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 0.72rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-left: 6px;
+      transition: background 0.12s;
+    }
+    .copy-chip:hover {
+      background: rgba(0, 0, 0, 0.06);
+      border-color: var(--primary-color, #0288d1);
+    }
+    .copy-alert {
+      background: rgba(76, 175, 80, 0.15);
+      color: #2e7d32;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      text-align: center;
+      margin-top: 6px;
+    }
+    .source-card {
+      background: rgba(0, 0, 0, 0.03);
+      border: 1px solid var(--divider-color, #e0e0e0);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+    }
+    .source-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .source-name {
+      font-weight: 600;
+      font-size: 0.82rem;
+      color: var(--primary-text-color, #212121);
+    }
+    .source-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 0.78rem;
+      margin-bottom: 4px;
+      min-width: 0;
+    }
+    .source-label {
+      color: var(--secondary-text-color, #757575);
+      flex-shrink: 0;
+    }
+    .source-val {
+      font-weight: 500;
+      text-align: right;
+      flex: 1;
+      min-width: 0;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .source-val.mono {
+      font-family: monospace;
+      font-size: 0.74rem;
+      word-break: break-all;
+      overflow-wrap: anywhere;
+    }
+    .open-entity-btn {
+      width: 100%;
+      margin-top: 6px;
+      padding: 5px 8px;
+      background: none;
+      border: 1px solid var(--primary-color, #0288d1);
+      color: var(--primary-color, #0288d1);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.76rem;
+      font-weight: 600;
+      text-align: center;
+      transition: background 0.15s, color 0.15s;
+    }
+    .open-entity-btn:hover {
+      background: var(--primary-color, #0288d1);
+      color: white;
     }
     .action-btn {
       width: 100%;
@@ -18104,18 +18362,26 @@ var _F = class extends Le {
 			...e,
 			master_root_mac: n,
 			integrations: r
-		}, this._config.height && this._config.height.trim() ? this.style.setProperty("--network-map-height", this._config.height) : this.style.removeProperty("--network-map-height"), this._updateTopology();
+		}, this._showOffline = e.show_offline === void 0 || !!e.show_offline, this._config.height && this._config.height.trim() ? this.style.setProperty("--network-map-height", this._config.height) : this.style.removeProperty("--network-map-height"), this._updateTopology();
 	}
 	set hass(e) {
 		let t = this._hass;
 		this._hass = e, (!t || Date.now() - this._lastUpdateTime > 5e3) && this._updateTopology();
 	}
+	connectedCallback() {
+		super.connectedCallback(), this._lastDataSignature = "", this.updateComplete.then(() => {
+			this._network || this._initNetwork(), this._setupResizeObserver(), this._updateTopology();
+		});
+	}
 	firstUpdated(e) {
-		if (super.firstUpdated(e), this._initNetwork(), window.ResizeObserver) {
-			this._resizeObserver = new ResizeObserver(() => {
-				this._network && this._network.redraw();
+		super.firstUpdated(e), this._initNetwork(), this._setupResizeObserver();
+	}
+	_setupResizeObserver() {
+		if (this._resizeObserver &&= (this._resizeObserver.disconnect(), void 0), window.ResizeObserver) {
+			this._resizeObserver = new ResizeObserver((e) => {
+				for (let t of e) t.contentRect.width > 0 && t.contentRect.height > 0 && (this._network ? (this._network.setSize("100%", "100%"), this._network.redraw()) : this._initNetwork());
 			});
-			let e = this.shadowRoot?.querySelector(".network-container");
+			let e = this.shadowRoot?.querySelector(".card-content-area");
 			e && this._resizeObserver.observe(e);
 		}
 	}
@@ -18172,6 +18438,23 @@ var _F = class extends Le {
 				enabled: !0,
 				iterations: 120,
 				updateInterval: 25,
+				fit: !0
+			}
+		}) : t === "molecular" ? (i = { hierarchical: { enabled: !1 } }, a = {
+			solver: "forceAtlas2Based",
+			forceAtlas2Based: {
+				gravitationalConstant: -90,
+				centralGravity: 0,
+				springLength: 90,
+				springConstant: .05,
+				damping: .85,
+				avoidOverlap: 1
+			},
+			minVelocity: .75,
+			stabilization: {
+				enabled: !0,
+				iterations: 35,
+				updateInterval: 10,
 				fit: !0
 			}
 		}) : (i = { hierarchical: { enabled: !1 } }, a = {
@@ -18242,17 +18525,53 @@ var _F = class extends Le {
 		let t = this._hass?.themes?.darkMode ?? window.matchMedia("(prefers-color-scheme: dark)").matches, n = {
 			nodes: this._nodesDataSet,
 			edges: this._edgesDataSet
-		}, r = this._config?.layout_mode || "tree";
+		}, r = this._config?.layout_mode || "molecular";
 		this._currentLayoutMode = r;
 		let i = this._buildNetworkOptions(t, r);
 		try {
-			this._network = new $(e, n, i), this._network.on("click", (e) => {
+			if (this._network = new $(e, n, i), this._network.on("click", (e) => {
 				if (e.nodes.length > 0) {
 					let t = e.nodes[0];
 					this._selectedNode = this._currentNodes.find((e) => e.id === t);
 				} else this._selectedNode = void 0;
 				this.requestUpdate();
-			}), this._initialized = !0, this._updateTopology();
+			}), this._network.on("stabilized", () => {
+				try {
+					this._network?.fit({ animation: {
+						duration: 350,
+						easingFunction: "easeInOutQuad"
+					} });
+				} catch {}
+			}), this._network.on("beforeDrawing", () => {
+				if (this._currentLayoutMode === "molecular" && this._network) {
+					let e = this._network.body?.nodes;
+					if (!e) return;
+					let t = Math.PI * .42;
+					for (let [n, r] of this._interfaceChildrenMap.entries()) {
+						let i = e[n], a = this._nodeParentMap.get(n);
+						if (!i || !a) continue;
+						let o = e[a];
+						if (!o) continue;
+						let s = i.x - o.x, c = i.y - o.y;
+						if (Math.hypot(s, c) < 1) continue;
+						let l = Math.atan2(c, s);
+						for (let n of r) {
+							let r = e[n];
+							if (!r || r.isFixed) continue;
+							let a = r.x - i.x, o = r.y - i.y, s = Math.hypot(a, o) || 1, c = Math.atan2(o, a) - l;
+							for (; c > Math.PI;) c -= 2 * Math.PI;
+							for (; c < -Math.PI;) c += 2 * Math.PI;
+							if (Math.abs(c) > t) {
+								let e = l + Math.sign(c) * t;
+								r.x = i.x + Math.cos(e) * s, r.y = i.y + Math.sin(e) * s;
+							}
+						}
+					}
+				}
+			}), this._initialized = !0, this._nodesDataSet.length > 0) try {
+				this._network.fit({ animation: !1 });
+			} catch {}
+			this._updateTopology();
 		} catch (e) {
 			console.error("[NetworkMapCard] Error initializing network canvas:", e);
 		}
@@ -18275,18 +18594,25 @@ var _F = class extends Le {
 					masterRootMac: t || "",
 					integrations: e,
 					clientsByConfigEntry: n.clientsByConfigEntry,
-					rootNames: n.rootNames
+					rootNames: n.rootNames,
+					homeassistantMac: this._config.homeassistant_mac
 				});
 				this._currentNodes = r.nodes;
 				let i = JSON.stringify({
-					n: r.nodes.map((e) => `${e.id}:${e.label}:${e.isConnected}:${e.ip}`),
+					n: r.nodes.map((e) => `${e.id}:${e.label}:${e.isConnected}:${e.ip}:${e.isHomeAssistant}`),
 					e: r.edges.map((e) => `${e.from}->${e.to}:${e.label}:${e.connectionType}`),
-					offline: this._showOffline
+					offline: this._showOffline,
+					layout: this._config.layout_mode || "molecular",
+					ha: this._config.homeassistant_mac
 				});
 				if (i === this._lastDataSignature) return;
 				this._lastDataSignature = i;
-				let a = this._hass?.themes?.darkMode ?? window.matchMedia("(prefers-color-scheme: dark)").matches, o = this._config.layout_mode || "tree", s = o === "tree" || o === "horizontal";
-				this._network && this._currentLayoutMode !== o && (this._currentLayoutMode = o, this._network.setOptions(this._buildNetworkOptions(a, o)));
+				let a = this._hass?.themes?.darkMode ?? window.matchMedia("(prefers-color-scheme: dark)").matches, o = this._config.layout_mode || "molecular", s = o === "tree" || o === "horizontal";
+				if (this._network && this._currentLayoutMode && this._currentLayoutMode !== o) {
+					this._currentLayoutMode = o, this._recreateNetwork();
+					return;
+				}
+				this._currentLayoutMode = o;
 				let c = r.nodes, l = r.edges;
 				if (!this._showOffline) {
 					let e = new Set(c.filter((e) => e.isRoot || e.isInterface || e.isConnected !== !1).map((e) => e.id));
@@ -18297,36 +18623,112 @@ var _F = class extends Le {
 					let n = new Set(c.map((e) => e.id));
 					l = l.filter((e) => n.has(e.from) && n.has(e.to));
 				}
+				c.sort((e, t) => {
+					if (e.isMasterRoot) return -1;
+					if (t.isMasterRoot) return 1;
+					if (e.isInterface && !t.isInterface) return -1;
+					if (!e.isInterface && t.isInterface) return 1;
+					let n = e.interfaceName || e.label || e.id, r = t.interfaceName || t.label || t.id;
+					return n.localeCompare(r, void 0, {
+						numeric: !0,
+						sensitivity: "base"
+					});
+				});
 				let u = /* @__PURE__ */ new Map();
 				for (let e of l) u.has(e.from) || u.set(e.from, []), u.get(e.from).push(e.to);
+				for (let [e, t] of u.entries()) t.sort((e, t) => {
+					let n = c.find((t) => t.id === e), r = c.find((e) => e.id === t), i = n?.interfaceName || n?.label || e, a = r?.interfaceName || r?.label || t;
+					return i.localeCompare(a, void 0, {
+						numeric: !0,
+						sensitivity: "base"
+					});
+				});
+				this._nodeParentMap = /* @__PURE__ */ new Map(), this._interfaceChildrenMap = /* @__PURE__ */ new Map();
+				for (let e of l) this._nodeParentMap.set(e.to, e.from);
+				for (let e of c) if (e.isInterface) {
+					let t = u.get(e.id) || [];
+					t.length > 0 && this._interfaceChildrenMap.set(e.id, t);
+				}
 				let d = (c.find((e) => e.isMasterRoot) || c.find((e) => e.isRoot) || c[0])?.id, f = /* @__PURE__ */ new Map();
 				if (!s && d) {
-					f.set(d, {
-						x: 0,
-						y: 0
-					});
-					let e = u.get(d) || [], t = Math.max(1, e.length);
-					e.forEach((e, n) => {
-						let r = n / t * 2 * Math.PI - Math.PI / 2, i = Math.cos(r) * 150, a = Math.sin(r) * 150;
-						f.set(e, {
-							x: i,
-							y: a
+					if (o === "molecular") {
+						f.set(d, {
+							x: 0,
+							y: 0
 						});
-						let o = u.get(e) || [], s = o.length;
-						o.forEach((e, t) => {
-							let n = s > 2 ? t / s * 2 * Math.PI : r - Math.PI / 4 + t / s * (Math.PI / 2), o = i + Math.cos(n) * 165, c = a + Math.sin(n) * 165;
+						let e = (t, n) => {
+							n.add(t);
+							let r = (u.get(t) || []).filter((e) => !n.has(e)), i = 1;
+							for (let t of r) i += e(t, n);
+							return i;
+						}, t = u.get(d) || [], n = t.map((t) => e(t, /* @__PURE__ */ new Set([d]))), r = n.reduce((e, t) => e + t, 0) || 1, i = -Math.PI / 2;
+						t.forEach((t, a) => {
+							let o = n[a] / r * 2 * Math.PI, s = i + o / 2;
+							i += o;
+							let c = Math.cos(s) * 120, l = Math.sin(s) * 120;
+							f.set(t, {
+								x: c,
+								y: l
+							});
+							let p = (t, n, r, i, a, o, s) => {
+								s.add(t);
+								let c = (u.get(t) || []).filter((e) => !s.has(e));
+								if (c.length === 0) return;
+								let l = c.length;
+								if (l === 1) {
+									let e = c[0], t = n + Math.cos(i) * o, l = r + Math.sin(i) * o;
+									f.set(e, {
+										x: t,
+										y: l
+									}), p(e, t, l, i, a, 95, s);
+									return;
+								}
+								let d = c.map((t) => e(t, new Set(s))), m = d.reduce((e, t) => e + t, 0) || 1, h = Math.min(a * .9, Math.PI * .82), g = i - h / 2;
+								c.forEach((e, t) => {
+									let i = d[t] / m * h, a = g + i / 2;
+									g += i;
+									let c = Math.max(95, Math.min(210, 80 + l * 7)), u = n + Math.cos(a) * c, _ = r + Math.sin(a) * c;
+									f.set(e, {
+										x: u,
+										y: _
+									}), p(e, u, _, a, i, o + 15, s);
+								});
+							};
+							p(t, c, l, s, o, 115, /* @__PURE__ */ new Set([d]));
+						});
+					} else {
+						f.set(d, {
+							x: 0,
+							y: 0
+						});
+						let e = u.get(d) || [], t = Math.max(1, e.length);
+						e.forEach((e, n) => {
+							let r = n / t * 2 * Math.PI - Math.PI / 2, i = Math.cos(r) * 150, a = Math.sin(r) * 150;
 							f.set(e, {
-								x: o,
-								y: c
+								x: i,
+								y: a
+							});
+							let o = u.get(e) || [], s = o.length;
+							o.forEach((e, t) => {
+								let n = s > 2 ? t / s * 2 * Math.PI : r - Math.PI / 4 + t / s * (Math.PI / 2), o = i + Math.cos(n) * 165, c = a + Math.sin(n) * 165;
+								f.set(e, {
+									x: o,
+									y: c
+								});
 							});
 						});
-					});
+					}
 				}
-				let p = c.map((e) => {
-					let t = e.isMasterRoot || e.id === d, n = f.get(e.id), r = !s && t ? {
+				let p = o === "molecular", m = c.map((e) => {
+					let t = e.isMasterRoot || e.id === d, n = f.get(e.id), r = !1;
+					s || (p ? (e.isMasterRoot || e.isRoot || e.isInterface) && (r = {
 						x: !0,
 						y: !0
-					} : !1, i = n ? n.x : void 0, o = n ? n.y : void 0;
+					}) : t && (r = {
+						x: !0,
+						y: !0
+					}));
+					let i = n ? n.x : void 0, o = n ? n.y : void 0;
 					if (e.isInterface) {
 						let t = e.connectionType === "lan", n = e.connectionType === "wifi";
 						return {
@@ -18354,6 +18756,35 @@ var _F = class extends Le {
 								size: 11,
 								color: a ? "#e0e0e0" : "#212121",
 								face: "Roboto, sans-serif"
+							}
+						};
+					}
+					if (e.isHomeAssistant) {
+						let t = `<b>${e.label}</b>`;
+						return e.ip && (t += `\n<i>${e.ip}</i>`), {
+							id: e.id,
+							label: t,
+							title: `<b>Home Assistant Server</b><br/>MAC: ${e.mac}${e.ip ? `<br/>IP: ${e.ip}` : ""}`,
+							shape: "image",
+							image: _F,
+							brokenImage: vF,
+							size: 13,
+							level: s ? e.depth ?? 0 : void 0,
+							x: s ? void 0 : i,
+							y: s ? void 0 : o,
+							fixed: !s && r,
+							font: {
+								multi: "html",
+								color: a ? "#e0e0e0" : "#212121",
+								ital: {
+									color: a ? "#90caf9" : "#1565c0",
+									size: 10,
+									mod: "normal"
+								},
+								bold: {
+									color: "#03a9f4",
+									size: 12
+								}
 							}
 						};
 					}
@@ -18387,13 +18818,13 @@ var _F = class extends Le {
 							border: "#616161"
 						}
 					}, l = 9);
-					let p = `<b>${e.label}</b>`;
-					e.ip && (p += `\n<i>${e.ip}</i>`);
-					let m = `<b>${e.label}</b><br/>MAC: ${e.mac}${e.ip ? `<br/>IP: ${e.ip}` : ""}${e.connectionType ? `<br/>Tipo: ${e.connectionType.toUpperCase()}` : ""}${e.state ? `<br/>Stato: ${e.state}` : ""}`;
+					let m = `<b>${e.label}</b>`;
+					e.ip && (m += `\n<i>${e.ip}</i>`);
+					let h = `<b>${e.label}</b><br/>MAC: ${e.mac}${e.ip ? `<br/>IP: ${e.ip}` : ""}${e.connectionType ? `<br/>Tipo: ${e.connectionType.toUpperCase()}` : ""}${e.state ? `<br/>Stato: ${e.state}` : ""}`;
 					return {
 						id: e.id,
-						label: p,
-						title: m,
+						label: m,
+						title: h,
 						shape: "dot",
 						size: l,
 						borderWidth: u,
@@ -18416,39 +18847,39 @@ var _F = class extends Le {
 							}
 						}
 					};
-				}), m = l.map((e) => {
-					let t = e.connectionType === "lan", n = e.connectionType === "wifi", r = a ? "#555555" : "#bbbbbb", i = !1, s = 1.6, c = 95;
-					t ? (i = !1, s = 2.2, r = a ? "#64b5f6" : "#1976d2", c = 90) : n && (i = [5, 5], s = 1.4, r = a ? "#4db6ac" : "#00897b", c = 105);
-					let l = {
+				}), h = l.map((e) => {
+					let t = e.connectionType === "lan", n = e.connectionType === "wifi", r = o === "molecular", i = a ? "#555555" : "#bbbbbb", s = !1, c = 1.6, l = r ? 85 : 95;
+					r && e.from === d ? l = 115 : t ? (s = !1, c = 2.2, i = a ? "#64b5f6" : "#1976d2", l = r ? 105 : 90) : n && (s = [5, 5], c = 1.4, i = a ? "#4db6ac" : "#00897b", l = r ? 115 : 105);
+					let u = {
 						enabled: !0,
 						type: "cubicBezier",
 						forceDirection: o === "horizontal" ? "horizontal" : "vertical",
 						roundness: t ? .08 : .22
 					};
-					return o === "radial" && (l = {
+					return (o === "radial" || o === "molecular") && (u = {
 						enabled: !0,
 						type: "continuous",
-						roundness: .25
+						roundness: .2
 					}), {
 						id: `${e.from}->${e.to}`,
 						from: e.from,
 						to: e.to,
 						label: e.label || "",
-						dashes: i,
-						width: s,
-						length: c,
+						dashes: s,
+						width: c,
+						length: l,
 						arrows: {
 							to: { enabled: !1 },
 							from: { enabled: !1 }
 						},
 						color: {
-							color: r,
+							color: i,
 							highlight: "var(--primary-color, #03a9f4)"
 						},
-						smooth: l
+						smooth: u
 					};
 				});
-				if (this._nodesDataSet.clear(), this._nodesDataSet.add(p), this._edgesDataSet.clear(), this._edgesDataSet.add(m), this._network && p.length > 0) try {
+				if (this._nodesDataSet.clear(), this._nodesDataSet.add(m), this._edgesDataSet.clear(), this._edgesDataSet.add(h), this._network && m.length > 0) try {
 					this._network.fit({ animation: !1 });
 				} catch {}
 			} catch (e) {
@@ -18489,6 +18920,35 @@ var _F = class extends Le {
 	_toggleOffline() {
 		this._showOffline = !this._showOffline, this._lastDataSignature = "", this._updateTopology();
 	}
+	_recreateNetwork() {
+		if (this._network) {
+			try {
+				this._network.destroy();
+			} catch {}
+			this._network = void 0;
+		}
+		this._nodesDataSet.clear(), this._edgesDataSet.clear(), this._lastDataSignature = "", this._initNetwork();
+	}
+	_cycleLayout() {
+		let e = [
+			"molecular",
+			"tree",
+			"radial",
+			"horizontal"
+		], t = this._currentLayoutMode || this._config?.layout_mode || "molecular", n = e[(e.indexOf(t) + 1) % e.length];
+		this._config &&= {
+			...this._config,
+			layout_mode: n
+		}, this._currentLayoutMode = n, this._recreateNetwork(), this.dispatchEvent(new CustomEvent("config-changed", {
+			detail: { config: this._config },
+			bubbles: !0,
+			composed: !0
+		}));
+	}
+	_getLayoutLabel() {
+		let e = this._currentLayoutMode || this._config?.layout_mode || "molecular";
+		return e === "molecular" ? "Molecolare" : e === "tree" ? "Albero" : e === "radial" ? "Radiale" : e === "horizontal" ? "Orizzontale" : "Molecolare";
+	}
 	_closeDetailDrawer() {
 		this._selectedNode = void 0, this.requestUpdate();
 	}
@@ -18501,6 +18961,33 @@ var _F = class extends Le {
 		});
 		this.dispatchEvent(t);
 	}
+	_getTraceToRoot(e) {
+		let t = [], n = e, r = /* @__PURE__ */ new Set(), i = this._edgesDataSet.get(), a = /* @__PURE__ */ new Map();
+		for (let e of i) a.set(e.to, e.from);
+		for (; n && !r.has(n);) {
+			r.add(n);
+			let e = this._currentNodes.find((e) => e.id === n);
+			e && t.unshift(e), n = a.get(n);
+		}
+		return t.filter((t) => !t.isInterface || t.id === e);
+	}
+	_selectAndFocusNode(e) {
+		let t = this._currentNodes.find((t) => t.id === e);
+		t && (this._selectedNode = t, this._network && this._network.focus(e, {
+			scale: 1.15,
+			animation: {
+				duration: 350,
+				easingFunction: "easeInOutQuad"
+			}
+		}), this.requestUpdate());
+	}
+	_copyToClipboard(e, t) {
+		navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(e).then(() => {
+			this._copyNotification = `${t} copiato!`, this.requestUpdate(), setTimeout(() => {
+				this._copyNotification = "", this.requestUpdate();
+			}, 2500);
+		}) : prompt(`Copia ${t}:`, e);
+	}
 	getCardSize() {
 		return 6;
 	}
@@ -18511,6 +18998,7 @@ var _F = class extends Le {
 		return {
 			type: "custom:network-map-card",
 			title: "Mappa di Rete",
+			layout_mode: "molecular",
 			show_offline: !0,
 			integrations: []
 		};
@@ -18527,19 +19015,6 @@ var _F = class extends Le {
 		let e = this._nodesDataSet.length > 0, t = this._config?.debug, n = new Set((this._config?.integrations || []).map((e) => e.config_entry_id));
 		return E`
       <ha-card>
-        ${this._config?.title ? E`
-              <div class="card-header">
-                <span>${this._config.title}</span>
-                <button
-                  class="header-action-btn"
-                  @click=${this._toggleOffline}
-                  title="${this._showOffline ? "Nascondi dispositivi offline" : "Mostra dispositivi offline"}"
-                >
-                  <span>${this._showOffline ? "●" : "○"}</span>
-                  ${this._showOffline ? "Nascondi offline" : "Mostra offline"}
-                </button>
-              </div>
-            ` : ""}
         ${t && this._diagnostics ? E`
               <div class="debug-box">
                 <div>
@@ -18582,6 +19057,20 @@ var _F = class extends Le {
             <button class="zoom-btn" @click=${this._zoomIn} title="Ingrandisci">+</button>
             <button class="zoom-btn" @click=${this._zoomOut} title="Rimpicciolisci">−</button>
             <button class="zoom-btn" @click=${this._resetZoom} title="Adatta mappa">⛶</button>
+            <button
+              class="zoom-btn"
+              @click=${this._cycleLayout}
+              title="Stile del grafo: ${this._getLayoutLabel()} (clicca per cambiare)"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M22 11V9h-7V3H9v6H2v2h7v6H7v4h4v-4H9v-6h6v4h-2v4h4v-4h-2v-4h7z"/></svg>
+            </button>
+            <button
+              class="zoom-btn ${this._showOffline ? "" : "filtered"}"
+              @click=${this._toggleOffline}
+              title="${this._showOffline ? "Nascondi dispositivi offline" : "Mostra dispositivi offline"}"
+            >
+              ${this._showOffline ? E`<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>` : E`<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>`}
+            </button>
           </div>
           ${e ? "" : E`<div class="status-overlay">Caricamento mappa o nessun client trovato...</div>`}
           ${this._selectedNode ? this._renderDetailDrawer(this._selectedNode) : ""}
@@ -18590,97 +19079,239 @@ var _F = class extends Le {
     `;
 	}
 	_renderDetailDrawer(e) {
-		let t = e.isRoot || e.isConnected !== !1, n = e.connectionType === "lan", r = e.connectionType === "wifi";
-		return e.isInterface ? E`
+		let t = e.isRoot || e.isConnected !== !1, n = e.connectionType === "lan", r = e.connectionType === "wifi", i = this._getTraceToRoot(e.id);
+		if (e.isInterface) return E`
         <div class="detail-drawer">
           <div class="detail-header">
             <div class="detail-title">${e.label}</div>
             <button class="close-btn" @click=${this._closeDetailDrawer} title="Chiudi">×</button>
           </div>
 
-          <div class="role-tag ${n ? "master" : "ap"}">
-            ${n ? "Interfaccia LAN" : "Interfaccia Wi-Fi"}
-          </div>
-
-          <div class="detail-row">
-            <span class="detail-label">Interfaccia:</span>
-            <span class="detail-value">${e.interfaceName || "Non specificata"}</span>
-          </div>
-
-          <div class="detail-row">
-            <span class="detail-label">Tipo:</span>
+          <div class="detail-badges">
+            <span class="role-tag ${n ? "master" : "ap"}">
+              ${n ? "Interfaccia LAN" : "Interfaccia Wi-Fi"}
+            </span>
             <span class="conn-tag ${n ? "lan" : r ? "wifi" : ""}">
               ${n ? "LAN" : r ? "Wi-Fi" : "Standard"}
             </span>
           </div>
+
+          <!-- Percorso di rete -->
+          ${i.length > 1 ? E`
+                <div class="drawer-section">
+                  <div class="drawer-section-title">Percorso di rete</div>
+                  <div class="trace-breadcrumb">
+                    ${i.map((t, n) => E`
+                        <span
+                          class="trace-pill ${t.id === e.id ? "active" : ""}"
+                          @click=${() => this._selectAndFocusNode(t.id)}
+                          title="Clicca per mettere a fuoco sulla mappa"
+                        >
+                          ${t.label}
+                        </span>
+                        ${n < i.length - 1 ? E`<span class="trace-separator">&gt;</span>` : ""}
+                      `)}
+                  </div>
+                </div>
+              ` : ""}
+
+          <!-- Informazioni -->
+          <div class="drawer-section">
+            <div class="drawer-section-title">Informazioni</div>
+            <div class="detail-row">
+              <span class="detail-label">Interfaccia:</span>
+              <span class="detail-value">${e.interfaceName || "Non specificata"}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Tipo:</span>
+              <span class="detail-value">${n ? "Cablata (LAN)" : r ? "Wireless (Wi-Fi)" : "Altro"}</span>
+            </div>
+          </div>
         </div>
-      ` : E`
+      `;
+		let a = e.sources && e.sources.length > 0 ? e.sources : [];
+		return E`
       <div class="detail-drawer">
         <div class="detail-header">
           <div class="detail-title">${e.label}</div>
           <button class="close-btn" @click=${this._closeDetailDrawer} title="Chiudi">×</button>
         </div>
 
-        ${e.isMasterRoot ? E`<div class="role-tag master">Principale</div>` : e.isRoot ? E`<div class="role-tag ap">Secondaria</div>` : ""}
-
-        <div class="detail-row">
-          <span class="detail-label">Stato:</span>
+        <!-- Badges stato e ruolo -->
+        <div class="detail-badges">
           <span class="status-badge ${t ? "online" : "offline"}">
             <span>●</span> ${t ? "Connesso" : "Disconnesso"}
           </span>
-        </div>
 
-        ${e.connectionType && e.connectionType !== "unknown" ? E`
-              <div class="detail-row">
-                <span class="detail-label">Connessione:</span>
+          ${e.isHomeAssistant ? E`<span class="role-tag master" style="background: rgba(3, 169, 244, 0.15); color: #0288d1; border-color: #03a9f4;">Server Home Assistant</span>` : e.isMasterRoot ? E`<span class="role-tag master">Router Gateway</span>` : e.isRoot ? E`<span class="role-tag ap">Access Point</span>` : ""}
+
+          ${e.connectionType && e.connectionType !== "unknown" ? E`
                 <span class="conn-tag ${n ? "lan" : r ? "wifi" : ""}">
-                  ${n ? "🔌 LAN Cablata" : r ? "📶 Wi-Fi Wireless" : e.connectionType.toUpperCase()}
+                  ${n ? "LAN" : r ? "Wi-Fi" : e.connectionType.toUpperCase()}
                 </span>
-              </div>
-            ` : ""}
-
-        <div class="detail-row">
-          <span class="detail-label">IP:</span>
-          <span class="detail-value" style="color: var(--primary-color, #0288d1); font-weight: bold;">
-            ${e.ip || "Non rilevato"}
-          </span>
+              ` : ""}
         </div>
 
-        <div class="detail-row">
-          <span class="detail-label">MAC:</span>
-          <span class="detail-value">${e.mac}</span>
-        </div>
-
-        ${e.rawAttributes?.port || e.rawAttributes?.lan_port || e.rawAttributes?.channel ? E`
-              <div class="detail-row">
-                <span class="detail-label">Porta/Canale:</span>
-                <span class="detail-value">
-                  ${e.rawAttributes?.port || e.rawAttributes?.lan_port || e.rawAttributes?.channel}
-                </span>
+        <!-- 1. Percorso dal dispositivo alla radice -->
+        ${i.length > 1 ? E`
+              <div class="drawer-section">
+                <div class="drawer-section-title">Percorso di rete</div>
+                <div class="trace-breadcrumb">
+                  ${i.map((t, n) => E`
+                      <span
+                        class="trace-pill ${t.id === e.id ? "active" : ""}"
+                        @click=${() => this._selectAndFocusNode(t.id)}
+                        title="Clicca per mettere a fuoco sulla mappa"
+                      >
+                        ${t.label}
+                      </span>
+                      ${n < i.length - 1 ? E`<span class="trace-separator">&gt;</span>` : ""}
+                    `)}
+                </div>
               </div>
             ` : ""}
 
-        ${e.entityId ? E`
-              <div class="detail-row">
-                <span class="detail-label">Entità HA:</span>
-                <span class="detail-value" style="font-size: 0.76rem;">${e.entityId}</span>
-              </div>
-            ` : ""}
+        <!-- 2. Informazioni Comuni Consolidate -->
+        <div class="drawer-section">
+          <div class="drawer-section-title">Informazioni Comuni</div>
 
-        ${e.entityId ? E`
-              <button class="action-btn" @click=${() => this._openMoreInfo(e.entityId)}>
-                Dettagli Entità HA
+          <div class="detail-row">
+            <span class="detail-label">Indirizzo IP:</span>
+            <span class="detail-value" style="color: var(--primary-color, #0288d1); font-weight: bold;">
+              ${e.ip || "Non rilevato"}
+              ${e.ip ? E`
+                    <button
+                      class="copy-chip"
+                      @click=${() => this._copyToClipboard(e.ip, "IP")}
+                      title="Copia indirizzo IP"
+                    >
+                      Copia
+                    </button>
+                  ` : ""}
+            </span>
+          </div>
+
+          <div class="detail-row">
+            <span class="detail-label">Indirizzo MAC:</span>
+            <span class="detail-value">
+              ${e.mac}
+              <button
+                class="copy-chip"
+                @click=${() => this._copyToClipboard(e.mac, "MAC")}
+                title="Copia indirizzo MAC"
+              >
+                Copia
               </button>
-            ` : ""}
+            </span>
+          </div>
+
+          <div class="detail-row">
+            <span class="detail-label">Stato globale:</span>
+            <span class="detail-value">${t ? "Online (Attivo)" : "Offline (Non connesso)"}</span>
+          </div>
+
+          ${this._copyNotification ? E`<div class="copy-alert">✓ ${this._copyNotification}</div>` : ""}
+        </div>
+
+        <!-- 3. Riferimenti alle varie Entità e Integrazioni -->
+        <div class="drawer-section">
+          <div class="drawer-section-title">
+            Entità e Integrazioni ${a.length > 0 ? `(${a.length})` : ""}
+          </div>
+
+          ${a.length > 0 ? a.map((t) => E`
+                  <div class="source-card">
+                    <div class="source-header">
+                      <span class="source-name">${t.integrationName}</span>
+                      <span class="status-badge ${t.isConnected === !1 ? "offline" : "online"}">
+                        ● ${t.state || (t.isConnected === !1 ? "offline" : "online")}
+                      </span>
+                    </div>
+
+                    ${t.name ? E`
+                          <div class="source-row">
+                            <span class="source-label">${t.deviceName && t.deviceName !== t.name ? "Nome entità:" : "Nome:"}</span>
+                            <span class="source-val">${t.name}</span>
+                          </div>
+                        ` : ""}
+
+                    ${t.deviceName && t.deviceName !== t.name ? E`
+                          <div class="source-row">
+                            <span class="source-label">Dispositivo:</span>
+                            <span class="source-val">${t.deviceName}</span>
+                          </div>
+                        ` : ""}
+
+                    ${t.entityId ? E`
+                          <div class="source-row">
+                            <span class="source-label">Entità:</span>
+                            <span class="source-val mono">${t.entityId}</span>
+                          </div>
+                        ` : ""}
+
+                    ${t.linkInfo ? E`
+                          <div class="source-row">
+                            <span class="source-label">Porta / Canale:</span>
+                            <span class="source-val">${t.linkInfo}</span>
+                          </div>
+                        ` : ""}
+
+                    ${t.ip && t.ip !== e.ip ? E`
+                          <div class="source-row">
+                            <span class="source-label">IP rilevato:</span>
+                            <span class="source-val mono">${t.ip}</span>
+                          </div>
+                        ` : ""}
+
+                    ${t.attributes?.signal !== void 0 || t.attributes?.rssi !== void 0 ? E`
+                          <div class="source-row">
+                            <span class="source-label">Segnale:</span>
+                            <span class="source-val">${t.attributes?.signal ?? t.attributes?.rssi} dBm</span>
+                          </div>
+                        ` : ""}
+
+                    ${t.attributes?.rate !== void 0 || t.attributes?.tx_rate !== void 0 ? E`
+                          <div class="source-row">
+                            <span class="source-label">Velocità Wi-Fi:</span>
+                            <span class="source-val">${t.attributes?.rate ?? t.attributes?.tx_rate}</span>
+                          </div>
+                        ` : ""}
+
+                    ${t.entityId ? E`
+                          <button
+                            class="open-entity-btn"
+                            @click=${() => this._openMoreInfo(t.entityId)}
+                            title="Apri scheda entità in Home Assistant"
+                          >
+                            Apri scheda entità
+                          </button>
+                        ` : ""}
+                  </div>
+                `) : e.entityId ? E`
+                <div class="source-card">
+                  <div class="source-row">
+                    <span class="source-label">Entità:</span>
+                    <span class="source-val mono">${e.entityId}</span>
+                  </div>
+                  <button class="open-entity-btn" @click=${() => this._openMoreInfo(e.entityId)}>
+                    Apri scheda entità
+                  </button>
+                </div>
+              ` : E`
+                <div style="font-size: 0.8rem; color: var(--secondary-text-color); font-style: italic;">
+                  Nessuna entità specifica associata.
+                </div>
+              `}
+        </div>
       </div>
     `;
 	}
 };
-customElements.get("network-map-card") || customElements.define("network-map-card", _F), window.customCards = window.customCards || [], window.customCards.push({
+customElements.get("network-map-card") || customElements.define("network-map-card", yF), window.customCards = window.customCards || [], window.customCards.push({
 	type: "network-map-card",
 	name: "Network Map Card",
 	description: "Mappa topologica dinamica della rete locale basata su integrazioni e MAC address.",
 	preview: !0
 });
 //#endregion
-export { _F as NetworkMapCard };
+export { yF as NetworkMapCard };

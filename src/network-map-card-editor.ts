@@ -6,6 +6,7 @@ export class NetworkMapCardEditor extends LitElement {
   private _hass?: HomeAssistant;
   private _config?: NetworkMapCardConfig;
   private _availableIntegrations: AvailableIntegrationSummary[] = [];
+  private _allDiscoveredDevices: Array<{ mac: string; name: string; ip?: string }> = [];
   private _selectedIntegrationToAdd = '';
   private _expandedIntegrations: Set<number> = new Set([0]);
 
@@ -225,8 +226,65 @@ export class NetworkMapCardEditor extends LitElement {
       await HaHelper.fetchClients(this._hass, []);
       const result = await HaHelper.fetchClients(this._hass, this._config?.integrations || []);
       this._availableIntegrations = result.diagnostics.availableIntegrations;
+
+      // Collect all unique discovered clients across configured integrations
+      const deviceMap = new Map<string, { mac: string; name: string; ip?: string }>();
+      for (const clientList of result.clientsByConfigEntry.values()) {
+        for (const c of clientList) {
+          if (c.mac && !deviceMap.has(c.mac)) {
+            deviceMap.set(c.mac, {
+              mac: c.mac,
+              name: c.name || c.mac,
+              ip: c.ip,
+            });
+          }
+        }
+      }
+      this._allDiscoveredDevices = Array.from(deviceMap.values()).sort((a, b) => a.name.localeCompare(b.name));
       this.requestUpdate();
     } catch (_) {}
+  }
+
+  private _onHomeAssistantMacChange(e: Event): void {
+    if (!this._config) return;
+    const select = e.target as HTMLSelectElement;
+    this._config = {
+      ...this._config,
+      homeassistant_mac: select.value || undefined,
+    };
+    this._fireConfigChanged();
+  }
+
+  private _onMasterRootMacChange(e: Event): void {
+    if (!this._config) return;
+    const input = e.target as HTMLInputElement;
+    this._config = {
+      ...this._config,
+      master_root_mac: input.value.trim() || undefined,
+    };
+    this._fireConfigChanged();
+  }
+
+  private _setSuggestedMasterMac(mac: string): void {
+    if (!this._config) return;
+    this._config = {
+      ...this._config,
+      master_root_mac: mac,
+    };
+    this._fireConfigChanged();
+    this.requestUpdate();
+  }
+
+  private _onIntegrationRootMacChange(index: number, e: Event): void {
+    if (!this._config || !this._config.integrations) return;
+    const input = e.target as HTMLInputElement;
+    const newIntegrations = [...this._config.integrations];
+    newIntegrations[index] = {
+      ...newIntegrations[index],
+      root_mac: input.value.trim() || undefined,
+    };
+    this._config = { ...this._config, integrations: newIntegrations };
+    this._fireConfigChanged();
   }
 
   private _fireConfigChanged(): void {
@@ -417,45 +475,85 @@ export class NetworkMapCardEditor extends LitElement {
     const configuredEntryIds = new Set(integrations.map((i) => i.config_entry_id));
     const availableToAdd = this._availableIntegrations.filter((i) => !configuredEntryIds.has(i.id));
 
+    const suggestedRoots: Array<{ label: string; mac: string }> = [];
+    for (const i of this._availableIntegrations) {
+      if (i.suggestedRootMac) {
+        suggestedRoots.push({
+          label: i.sampleName || i.domain,
+          mac: i.suggestedRootMac,
+        });
+      }
+    }
+
     return html`
       <div class="card-config">
         <!-- 1. Generale -->
         <div class="editor-section">
           <div class="section-title">Impostazioni generali</div>
           <div class="form-row">
-            <label>Titolo</label>
-            <input
-              type="text"
-              class="input-text"
-              .value=${this._config.title || ''}
-              @input=${this._onTitleChange}
-              placeholder="Mappa di Rete"
-            />
-          </div>
-          <div class="form-row">
-            <label>Altezza (opzionale, default: responsive)</label>
-            <input
-              type="text"
-              class="input-text"
-              .value=${this._config.height || ''}
-              @input=${this._onHeightChange}
-              placeholder="Auto / Responsive (es. 60vh o 500px)"
-            />
-            <small style="color: var(--secondary-text-color);">
-              Lascia vuoto per adattamento responsive automatico allo schermo (telefono, tablet o PC).
-            </small>
-          </div>
-          <div class="form-row">
             <label>Stile del grafo (Layout)</label>
             <select
               class="select-dropdown"
-              .value=${this._config.layout_mode || 'tree'}
+              .value=${this._config.layout_mode || 'molecular'}
               @change=${this._onLayoutModeChange}
             >
-              <option value="tree">Albero (Dall'alto verso il basso)</option>
-              <option value="radial">Costellazione radiale (A raggiera)</option>
-              <option value="horizontal">Albero orizzontale (Da sinistra a destra)</option>
+              <option value="molecular">Molecolare</option>
+              <option value="tree">Albero</option>
+              <option value="radial">Radiale</option>
+              <option value="horizontal">Orizzontale</option>
             </select>
+          </div>
+          <div class="form-row">
+            <label>MAC Router Principale / Gateway (Livello 0)</label>
+            <input
+              type="text"
+              class="input-text"
+              .value=${this._config.master_root_mac || ''}
+              @input=${this._onMasterRootMacChange}
+              placeholder="es. AA:BB:CC:DD:EE:FF (opzionale se dedotto dall'integrazione principale)"
+            />
+            ${suggestedRoots.length > 0
+              ? html`
+                  <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center;">
+                    <span style="font-size: 0.72rem; color: var(--secondary-text-color);">Rilevati:</span>
+                    ${suggestedRoots.map(
+                      (r) => html`
+                        <button
+                          type="button"
+                          class="chip-btn"
+                          @click=${() => this._setSuggestedMasterMac(r.mac)}
+                          title="Imposta come Router Principale"
+                        >
+                          ${r.label}: ${r.mac}
+                        </button>
+                      `
+                    )}
+                  </div>
+                `
+              : ''}
+            <small style="color: var(--secondary-text-color);">
+              MAC del router principale da cui si dirama l'intera rete.
+            </small>
+          </div>
+          <div class="form-row">
+            <label>Dispositivo Home Assistant (Server)</label>
+            <select
+              class="select-dropdown"
+              .value=${this._config.homeassistant_mac || ''}
+              @change=${this._onHomeAssistantMacChange}
+            >
+              <option value="">-- Nessuno selezionato --</option>
+              ${this._allDiscoveredDevices.map(
+                (d) => html`
+                  <option value=${d.mac} ?selected=${d.mac === this._config?.homeassistant_mac}>
+                    ${d.name} ${d.ip ? `(${d.ip})` : `[${d.mac}]`}
+                  </option>
+                `
+              )}
+            </select>
+            <small style="color: var(--secondary-text-color);">
+              Mostra l'icona ufficiale di Home Assistant sulla mappa per il nodo selezionato.
+            </small>
           </div>
           <div class="form-row">
             <label class="checkbox-row">
@@ -595,6 +693,21 @@ export class NetworkMapCardEditor extends LitElement {
                     />
                     Secondaria
                   </label>
+                </div>
+
+                <!-- MAC Apparato -->
+                <div class="form-row">
+                  <label>MAC apparato (Root MAC)</label>
+                  <input
+                    type="text"
+                    class="input-text"
+                    .value=${int.root_mac || ''}
+                    @input=${(e: Event) => this._onIntegrationRootMacChange(index, e)}
+                    placeholder="es. AA:BB:CC:DD:EE:FF (opzionale se auto-rilevato)"
+                  />
+                  <small style="color: var(--secondary-text-color);">
+                    Identificativo MAC dell'apparato (router o access point) per questa integrazione.
+                  </small>
                 </div>
 
                 <!-- Attributo Porta / Canale -->

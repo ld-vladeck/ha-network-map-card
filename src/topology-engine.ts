@@ -3,6 +3,7 @@ import {
   IntegrationConfig,
   NetworkEdge,
   NetworkNode,
+  NodeEntitySource,
 } from './types';
 import { normalizeMac, detectConnectionType } from './ha-helper';
 
@@ -13,6 +14,7 @@ export interface BuildGraphInput {
   integrations: IntegrationConfig[];
   clientsByConfigEntry: Map<string, DiscoveredClient[]>;
   rootNames?: Map<string, string>;
+  homeassistantMac?: string;
 }
 
 export interface GraphData {
@@ -31,6 +33,7 @@ function slugify(text: string): string {
 export class TopologyEngine {
   public static buildGraph(input: BuildGraphInput): GraphData {
     const masterRootMac = normalizeMac(input.masterRootMac);
+    const haMac = normalizeMac(input.homeassistantMac);
     const nodesMap = new Map<string, NetworkNode>();
     const allRoots = new Set<string>();
     const rootNames = input.rootNames || new Map<string, string>();
@@ -49,6 +52,7 @@ export class TopologyEngine {
             mac: rootMac,
             isRoot: true,
             isMasterRoot: rootMac === masterRootMac,
+            isHomeAssistant: Boolean(haMac && rootMac === haMac),
             depth: rootMac === masterRootMac ? 0 : undefined,
           });
         }
@@ -64,6 +68,7 @@ export class TopologyEngine {
         mac: masterRootMac,
         isRoot: true,
         isMasterRoot: true,
+        isHomeAssistant: Boolean(haMac && masterRootMac === haMac),
         depth: 0,
       });
     }
@@ -72,11 +77,12 @@ export class TopologyEngine {
     // Interface edges: rootMac -> interfaceNodeId
     const rootToInterfaceEdges = new Map<string, NetworkEdge>(); // key = from->to
     // Interface to child edges: key = childMac -> Array of candidate edges
-    const interfaceToChildEdges = new Map<string, (NetworkEdge & { rootMac: string })[]>();
+    const interfaceToChildEdges = new Map<string, (NetworkEdge & { rootMac: string; isConnected?: boolean; client?: DiscoveredClient })[]>();
 
     for (const integration of input.integrations) {
       const rootMac = normalizeMac(integration.root_mac);
       const clients = input.clientsByConfigEntry.get(integration.config_entry_id) || [];
+      const intName = rootNames.get(rootMac) || integration.name || 'Integrazione';
 
       for (const client of clients) {
         const childMac = normalizeMac(client.mac);
@@ -130,7 +136,21 @@ export class TopologyEngine {
           });
         }
 
+        const sourceEntry: NodeEntitySource = {
+          integrationId: integration.config_entry_id,
+          integrationName: intName,
+          name: client.entityName || client.name,
+          deviceName: client.deviceName,
+          entityId: client.entityId,
+          state: client.state,
+          isConnected: client.isConnected,
+          linkInfo: client.linkInfo,
+          ip: client.ip,
+          attributes: client.attributes,
+        };
+
         // Register / update client node
+        const isHa = Boolean(haMac && childMac === haMac);
         const existingNode = nodesMap.get(childMac);
         if (!existingNode) {
           nodesMap.set(childMac, {
@@ -143,10 +163,22 @@ export class TopologyEngine {
             connectionType: connType,
             isRoot: allRoots.has(childMac),
             isMasterRoot: childMac === masterRootMac,
+            isHomeAssistant: isHa,
             entityId: client.entityId,
             rawAttributes: client.attributes,
+            sources: [sourceEntry],
           });
         } else {
+          if (isHa) {
+            existingNode.isHomeAssistant = true;
+          }
+          if (!existingNode.sources) {
+            existingNode.sources = [];
+          }
+          if (!existingNode.sources.some((s) => s.integrationId === sourceEntry.integrationId)) {
+            existingNode.sources.push(sourceEntry);
+          }
+
           const hasAuthoritativeRootName = rootNames.has(childMac);
           if (
             !hasAuthoritativeRootName &&
@@ -182,6 +214,8 @@ export class TopologyEngine {
           to: childMac,
           connectionType: connType,
           rootMac: rootMac,
+          isConnected: client.isConnected,
+          client: client,
         });
       }
     }
@@ -241,19 +275,33 @@ export class TopologyEngine {
       }
     }
 
-    // 4. Resolve Edges: select edge from interface with MAX depth
+    // 4. Resolve Edges: prioritize online candidate, fallback to max depth
     const finalEdges: NetworkEdge[] = [];
     const activeInterfaceIds = new Set<string>();
 
     for (const [childMac, candidateEdges] of interfaceToChildEdges.entries()) {
       let bestEdge = candidateEdges[0];
-      let maxDepth = (nodesMap.get(bestEdge.from)?.depth ?? 0);
 
       for (let i = 1; i < candidateEdges.length; i++) {
         const edge = candidateEdges[i];
+
+        const edgeOnline = edge.isConnected !== false;
+        const bestOnline = bestEdge.isConnected !== false;
+
+        // Rule 1: Online device takes precedence over offline device
+        if (edgeOnline && !bestOnline) {
+          bestEdge = edge;
+          continue;
+        }
+        if (!edgeOnline && bestOnline) {
+          continue;
+        }
+
+        // Rule 2: If both online or both offline, evaluate topology depth
         const depth = nodesMap.get(edge.from)?.depth ?? 0;
-        if (depth > maxDepth) {
-          maxDepth = depth;
+        const bestDepth = nodesMap.get(bestEdge.from)?.depth ?? 0;
+
+        if (depth > bestDepth) {
           bestEdge = edge;
         }
       }
@@ -266,12 +314,25 @@ export class TopologyEngine {
 
       activeInterfaceIds.add(bestEdge.from);
 
-      // Update child depth
+      // Update child node with the winning candidate's attributes
       const childNode = nodesMap.get(childMac);
       if (childNode) {
-        childNode.depth = maxDepth + 1;
+        const bestDepth = nodesMap.get(bestEdge.from)?.depth ?? 0;
+        childNode.depth = bestDepth + 1;
         if (bestEdge.connectionType && bestEdge.connectionType !== 'unknown') {
           childNode.connectionType = bestEdge.connectionType;
+        }
+        if (bestEdge.client) {
+          if (bestEdge.client.state !== undefined) {
+            childNode.state = bestEdge.client.state;
+            childNode.isConnected = bestEdge.client.isConnected;
+          }
+          if (bestEdge.client.ip) {
+            childNode.ip = bestEdge.client.ip;
+          }
+          if (bestEdge.client.entityId) {
+            childNode.entityId = bestEdge.client.entityId;
+          }
         }
       }
     }
@@ -289,6 +350,26 @@ export class TopologyEngine {
       if (node.isInterface) return activeInterfaceIds.has(node.id);
       return true;
     });
+
+    // Process forced links
+    if (input.forcedLinks) {
+      for (const fl of input.forcedLinks) {
+        const fromMac = resolveMac(fl.from);
+        const toMac = resolveMac(fl.to);
+        if (fromMac && toMac && fromMac !== toMac) {
+          const existingIdx = finalEdges.findIndex((e) => e.to === toMac);
+          if (existingIdx !== -1) {
+            finalEdges.splice(existingIdx, 1);
+          }
+          finalEdges.push({
+            from: fromMac,
+            to: toMac,
+            label: fl.label,
+            connectionType: fl.connection_type || 'lan',
+          });
+        }
+      }
+    }
 
     return {
       nodes: finalNodes,

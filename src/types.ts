@@ -12,8 +12,9 @@ export interface IntegrationConfig {
 export interface NetworkMapCardConfig {
   type: string;
   title?: string;
-  layout_mode?: 'tree' | 'radial' | 'horizontal'; // Stile del grafo
+  layout_mode?: 'tree' | 'radial' | 'molecular' | 'horizontal'; // Stile del grafo
   master_root_mac?: string; // Opzionale: dedotto automaticamente dalla prima integrazione o dall'integrazione con is_master: true
+  homeassistant_mac?: string; // MAC del dispositivo che ospita Home Assistant
   // Ora supporta sia un'integrazione singola che un array
   integrations?: IntegrationConfig[];
   // Supporto rapido per testare una singola integrazione diretta
@@ -73,6 +74,8 @@ export interface HomeAssistant {
 export interface DiscoveredClient {
   mac: string;
   name: string;
+  entityName?: string;
+  deviceName?: string;
   ip?: string;
   state?: string;
   isConnected?: boolean;
@@ -80,6 +83,19 @@ export interface DiscoveredClient {
   entityId?: string;
   deviceId?: string;
   linkInfo?: string;
+  attributes?: Record<string, any>;
+}
+
+export interface NodeEntitySource {
+  integrationId: string;
+  integrationName: string;
+  name?: string;
+  deviceName?: string;
+  entityId?: string;
+  state?: string;
+  isConnected?: boolean;
+  linkInfo?: string;
+  ip?: string;
   attributes?: Record<string, any>;
 }
 
@@ -93,11 +109,13 @@ export interface NetworkNode {
   connectionType?: 'lan' | 'wifi' | 'unknown';
   isRoot?: boolean;
   isMasterRoot?: boolean;
+  isHomeAssistant?: boolean;
   isInterface?: boolean;
   interfaceName?: string;
   depth?: number;
   entityId?: string;
   rawAttributes?: Record<string, any>;
+  sources?: NodeEntitySource[];
 }
 
 export interface NetworkEdge {
