@@ -26,6 +26,7 @@ export class NetworkMapCard extends LitElement {
   private _showOffline = true;
   private _interfaceChildrenMap: Map<string, string[]> = new Map();
   private _nodeParentMap: Map<string, string> = new Map();
+  private _lastAspectOrientation: 'landscape' | 'portrait' | 'square' = 'landscape';
 
   static styles = css`
     :host {
@@ -557,6 +558,19 @@ export class NetworkMapCard extends LitElement {
       this._resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
           if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+            const w = entry.contentRect.width;
+            const h = entry.contentRect.height;
+            const currentOrientation = w >= h * 1.05 ? 'landscape' : h > w * 1.05 ? 'portrait' : 'square';
+
+            const isMolecular = (this._currentLayoutMode || this._config?.layout_mode) === 'molecular';
+            if (isMolecular && this._lastAspectOrientation && this._lastAspectOrientation !== currentOrientation) {
+              this._lastAspectOrientation = currentOrientation;
+              this._lastDataSignature = '';
+              this._updateTopology();
+              return;
+            }
+            this._lastAspectOrientation = currentOrientation;
+
             if (!this._network) {
               this._initNetwork();
             } else {
@@ -838,7 +852,10 @@ export class NetworkMapCard extends LitElement {
   }
 
   private async _updateTopology(): Promise<void> {
-    if (!this._hass || !this._config || this._isBuilding) return;
+    if (!this._config || this._isBuilding) return;
+
+    const debugData = (this._config as any)._debug_data;
+    if (!this._hass && !debugData) return;
 
     this._isBuilding = true;
     this._lastUpdateTime = Date.now();
@@ -849,7 +866,7 @@ export class NetworkMapCard extends LitElement {
       // Auto-detect root_mac for integrations if not provided
       const resolvedIntegrations = rawIntegrations.map((int) => {
         let mac = int.root_mac;
-        if (!mac && this._hass) {
+        if (!mac && this._hass && !debugData) {
           mac = HaHelper.autoDetectRootMac(this._hass, int.config_entry_id) || '';
         }
         return { ...int, root_mac: mac || '' };
@@ -862,14 +879,33 @@ export class NetworkMapCard extends LitElement {
         masterMac = masterInt?.root_mac || '';
       }
 
-      const fetchResult = await HaHelper.fetchClients(this._hass, resolvedIntegrations);
-      this._diagnostics = fetchResult.diagnostics;
+      let clientsByConfigEntry: Map<string, DiscoveredClient[]>;
+      let rootNames: Map<string, string> | undefined;
+
+      if (debugData && debugData.clientsByConfigEntry) {
+        clientsByConfigEntry = new Map();
+        for (const [k, v] of Object.entries(debugData.clientsByConfigEntry)) {
+          clientsByConfigEntry.set(k, v as DiscoveredClient[]);
+        }
+        rootNames = new Map();
+        if (debugData.rootNames) {
+          for (const [k, v] of Object.entries(debugData.rootNames)) {
+            rootNames.set(k, v as string);
+          }
+        }
+      } else {
+        if (!this._hass) return;
+        const fetchResult = await HaHelper.fetchClients(this._hass, resolvedIntegrations);
+        this._diagnostics = fetchResult.diagnostics;
+        clientsByConfigEntry = fetchResult.clientsByConfigEntry;
+        rootNames = fetchResult.rootNames;
+      }
 
       const graphData = TopologyEngine.buildGraph({
         masterRootMac: masterMac || '',
         integrations: resolvedIntegrations,
-        clientsByConfigEntry: fetchResult.clientsByConfigEntry,
-        rootNames: fetchResult.rootNames,
+        clientsByConfigEntry,
+        rootNames,
         homeassistantMac: this._config.homeassistant_mac,
       });
 
@@ -989,12 +1025,9 @@ export class NetworkMapCard extends LitElement {
       const initialPositions = new Map<string, { x: number; y: number }>();
       if (!isHierarchical && masterId) {
         if (layoutMode === 'molecular') {
-          // Modello Molecolare a bolle d'interfaccia:
-          // Il router principale è il centro.
-          // Le sue interfacce sono disposte vicine a cerchio intorno a lui (raggio 85px).
-          // Ciascuna interfaccia è un centro locale per i propri dispositivi,
-          // che si dispongono a ventaglio verso l'esterno, respinti dal router centrale
-          // e dal proprio apparato genitore (zero elettroni nello spazio inter-apparati).
+          // Modello Molecolare Viewport-Aware:
+          // Orienta dinamicamente lo scheletro portante (Router e Access Point)
+          // in base alle proporzioni dello schermo (Landscape orizzontale vs Portrait verticale)
           initialPositions.set(masterId, { x: 0, y: 0 });
 
           const countSubtree = (nodeId: string, visited: Set<string>): number => {
@@ -1007,21 +1040,143 @@ export class NetworkMapCard extends LitElement {
             return count;
           };
 
+          const containsRoot = (nodeId: string, visited: Set<string>): boolean => {
+            visited.add(nodeId);
+            const node = nodesToDisplay.find((n) => n.id === nodeId);
+            if (node?.isRoot && !node.isMasterRoot) return true;
+            const children = (childrenMap.get(nodeId) || []).filter((c) => !visited.has(c));
+            for (const childId of children) {
+              if (containsRoot(childId, visited)) return true;
+            }
+            return false;
+          };
+
           const masterChildren = childrenMap.get(masterId) || [];
-          const weights = masterChildren.map((c) => countSubtree(c, new Set([masterId])));
-          const totalWeight = weights.reduce((sum, w) => sum + w, 0) || 1;
 
-          let currentAngle = -Math.PI / 2; // Inizia da ore 12 e ruota in senso orario
+          // Rileva proporzioni reali della viewport / contenitore
+          const container = this.shadowRoot?.querySelector('.network-container') as HTMLDivElement | null;
+          const cWidth = container?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 800);
+          const cHeight = container?.clientHeight || (typeof window !== 'undefined' ? window.innerHeight : 600);
+          const aspect = cWidth / Math.max(1, cHeight);
+          const isLandscape = aspect >= 1.05;
+          const isPortrait = aspect < 0.95;
 
-          masterChildren.forEach((ifId, idx) => {
-            const sectorSpan = (weights[idx] / totalWeight) * 2 * Math.PI;
-            const midAngle = currentAngle + sectorSpan / 2;
-            currentAngle += sectorSpan;
+          // Fattori di allungamento lungo gli assi X e Y per saturare lo spazio disponibile
+          const stretchX = isLandscape ? Math.min(1.45, Math.max(1.0, Math.sqrt(aspect))) : 1.0;
+          const stretchY = isPortrait ? Math.min(1.45, Math.max(1.0, Math.sqrt(1 / aspect))) : 1.0;
 
-            // Posizione dell'interfaccia del router: allungata a 120px per dare ampio respiro al centro
+          // Distingui rami portanti di dorsale (che portano ad AP/Router) da rami terminali di client
+          const backboneChildren: string[] = [];
+          const terminalChildren: string[] = [];
+          for (const ifId of masterChildren) {
+            if (containsRoot(ifId, new Set([masterId]))) {
+              backboneChildren.push(ifId);
+            } else {
+              terminalChildren.push(ifId);
+            }
+          }
+
+          const childAngleMap = new Map<string, { angle: number; span: number }>();
+
+          if (backboneChildren.length > 0 && (isLandscape || isPortrait)) {
+            if (isLandscape) {
+              // SCHERMO ORIZZONTALE (Landscape): Dorsale principale lungo l'asse X con lieve inclinazione organica naturale (~ -9.5°)
+              const organicTilt = -0.16;
+
+              if (backboneChildren.length === 1) {
+                childAngleMap.set(backboneChildren[0], { angle: 0 + organicTilt, span: Math.PI * 0.7 });
+              } else if (backboneChildren.length === 2) {
+                childAngleMap.set(backboneChildren[0], { angle: 0 + organicTilt, span: Math.PI * 0.65 });
+                childAngleMap.set(backboneChildren[1], { angle: Math.PI + organicTilt, span: Math.PI * 0.65 });
+              } else {
+                const step = (Math.PI * 0.8) / (backboneChildren.length - 1);
+                backboneChildren.forEach((bId, idx) => {
+                  const a = -Math.PI * 0.4 + idx * step + organicTilt;
+                  childAngleMap.set(bId, { angle: a, span: step * 0.9 });
+                });
+              }
+
+              // I client locali si distribuiscono nei settori verticali (In Alto: -PI/2 + tilt, In Basso: +PI/2 + tilt)
+              const topTerminals: string[] = [];
+              const bottomTerminals: string[] = [];
+              terminalChildren.forEach((tId, idx) => {
+                if (idx % 2 === 0) topTerminals.push(tId);
+                else bottomTerminals.push(tId);
+              });
+
+              const assignSector = (list: string[], centerAngle: number) => {
+                if (list.length === 0) return;
+                const arc = Math.min(Math.PI * 0.85, 0.45 * list.length + 0.3);
+                const step = list.length > 1 ? arc / (list.length - 1) : 0;
+                list.forEach((id, idx) => {
+                  const a = list.length === 1 ? centerAngle : centerAngle - arc / 2 + idx * step;
+                  childAngleMap.set(id, { angle: a, span: step || Math.PI * 0.4 });
+                });
+              };
+
+              assignSector(topTerminals, -Math.PI / 2 + organicTilt);
+              assignSector(bottomTerminals, Math.PI / 2 + organicTilt);
+            } else {
+              // SCHERMO VERTICALE (Portrait): Dorsale principale lungo l'asse Y con lieve inclinazione organica naturale (~ +9.5°)
+              const organicTilt = 0.16;
+
+              if (backboneChildren.length === 1) {
+                childAngleMap.set(backboneChildren[0], { angle: Math.PI / 2 + organicTilt, span: Math.PI * 0.7 });
+              } else if (backboneChildren.length === 2) {
+                childAngleMap.set(backboneChildren[0], { angle: Math.PI / 2 + organicTilt, span: Math.PI * 0.65 });
+                childAngleMap.set(backboneChildren[1], { angle: -Math.PI / 2 + organicTilt, span: Math.PI * 0.65 });
+              } else {
+                const step = (Math.PI * 0.8) / (backboneChildren.length - 1);
+                backboneChildren.forEach((bId, idx) => {
+                  const a = Math.PI * 0.1 + idx * step + organicTilt;
+                  childAngleMap.set(bId, { angle: a, span: step * 0.9 });
+                });
+              }
+
+              // I client locali si distribuiscono nei settori orizzontali (A Destra: 0 + tilt, A Sinistra: PI + tilt)
+              const leftTerminals: string[] = [];
+              const rightTerminals: string[] = [];
+              terminalChildren.forEach((tId, idx) => {
+                if (idx % 2 === 0) rightTerminals.push(tId);
+                else leftTerminals.push(tId);
+              });
+
+              const assignSector = (list: string[], centerAngle: number) => {
+                if (list.length === 0) return;
+                const arc = Math.min(Math.PI * 0.85, 0.45 * list.length + 0.3);
+                const step = list.length > 1 ? arc / (list.length - 1) : 0;
+                list.forEach((id, idx) => {
+                  const a = list.length === 1 ? centerAngle : centerAngle - arc / 2 + idx * step;
+                  childAngleMap.set(id, { angle: a, span: step || Math.PI * 0.4 });
+                });
+              };
+
+              assignSector(rightTerminals, 0 + organicTilt);
+              assignSector(leftTerminals, Math.PI + organicTilt);
+            }
+          } else {
+            // Distribuzione circolare proporzionale per schermi quadrati o router singolo
+            const weights = masterChildren.map((c) => countSubtree(c, new Set([masterId])));
+            const totalWeight = weights.reduce((sum, w) => sum + w, 0) || 1;
+            let currentAngle = isLandscape ? 0 : -Math.PI / 2;
+
+            masterChildren.forEach((ifId, idx) => {
+              const sectorSpan = (weights[idx] / totalWeight) * 2 * Math.PI;
+              const midAngle = currentAngle + sectorSpan / 2;
+              currentAngle += sectorSpan;
+              childAngleMap.set(ifId, { angle: midAngle, span: sectorSpan });
+            });
+          }
+
+          masterChildren.forEach((ifId) => {
+            const angleInfo = childAngleMap.get(ifId) || { angle: 0, span: Math.PI / 2 };
+            const midAngle = angleInfo.angle;
+            const sectorSpan = angleInfo.span;
+
+            // Posizione dell'interfaccia del router: allungata con fattore stretch
             const rIf = 120;
-            const ifX = Math.cos(midAngle) * rIf;
-            const ifY = Math.sin(midAngle) * rIf;
+            const ifX = Math.cos(midAngle) * rIf * stretchX;
+            const ifY = Math.sin(midAngle) * rIf * stretchY;
             initialPositions.set(ifId, { x: ifX, y: ifY });
 
             // Sventaglia i discendenti di questa interfaccia verso l'esterno lungo la direzione midAngle
@@ -1040,10 +1195,10 @@ export class NetworkMapCard extends LitElement {
 
               const cCount = children.length;
               if (cCount === 1) {
-                // Nodo singolo in cascata (es. LAN1 -> TP-Link AP): prosegue dritto lungo il raggio verso l'esterno
+                // Nodo singolo in cascata (es. LAN1 -> TP-Link AP): prosegue dritto lungo la direzione principale
                 const childId = children[0];
-                const childX = parentX + Math.cos(baseAngle) * hopDist;
-                const childY = parentY + Math.sin(baseAngle) * hopDist;
+                const childX = parentX + Math.cos(baseAngle) * hopDist * stretchX;
+                const childY = parentY + Math.sin(baseAngle) * hopDist * stretchY;
                 initialPositions.set(childId, { x: childX, y: childY });
                 layoutBranchOutward(childId, childX, childY, baseAngle, availSpan, 95, visited);
                 return;
@@ -1064,8 +1219,8 @@ export class NetworkMapCard extends LitElement {
 
                 // Raggio del ventaglio proporzionale al numero di elementi
                 const dist = Math.max(95, Math.min(210, 80 + cCount * 7));
-                const childX = parentX + Math.cos(cMidAngle) * dist;
-                const childY = parentY + Math.sin(cMidAngle) * dist;
+                const childX = parentX + Math.cos(cMidAngle) * dist * stretchX;
+                const childY = parentY + Math.sin(cMidAngle) * dist * stretchY;
                 initialPositions.set(childId, { x: childX, y: childY });
 
                 layoutBranchOutward(childId, childX, childY, cMidAngle, cSpan, hopDist + 15, visited);
@@ -1128,6 +1283,10 @@ export class NetworkMapCard extends LitElement {
         if (node.isInterface) {
           const isLan = node.connectionType === 'lan';
           const isWifi = node.connectionType === 'wifi';
+          const isOfflineIf =
+            node.interfaceName?.toLowerCase().includes('disconness') ||
+            node.interfaceName?.toLowerCase().includes('offline');
+
           return {
             id: node.id,
             label: `<b>${node.label}</b>`,
@@ -1142,22 +1301,26 @@ export class NetworkMapCard extends LitElement {
             fixed: isHierarchical ? false : fixedConstraint,
             color: {
               background: isDark
-                ? isLan
+                ? isOfflineIf
+                  ? '#262626'
+                  : isLan
                   ? '#162836'
                   : '#122927'
+                : isOfflineIf
+                ? '#f0f0f0'
                 : isLan
                 ? '#e3f2fd'
                 : '#e0f2f1',
-              border: isLan ? '#1976d2' : isWifi ? '#00897b' : '#757575',
+              border: isOfflineIf ? '#9e9e9e' : isLan ? '#1976d2' : isWifi ? '#00897b' : '#757575',
               highlight: {
-                background: isLan ? '#bbdefb' : '#b2dfdb',
-                border: '#0288d1',
+                background: isOfflineIf ? '#e0e0e0' : isLan ? '#bbdefb' : '#b2dfdb',
+                border: isOfflineIf ? '#757575' : '#0288d1',
               },
             },
             font: {
               multi: 'html',
               size: 11,
-              color: isDark ? '#e0e0e0' : '#212121',
+              color: isDark ? (isOfflineIf ? '#9e9e9e' : '#e0e0e0') : isOfflineIf ? '#757575' : '#212121',
               face: 'Roboto, sans-serif',
             },
           };

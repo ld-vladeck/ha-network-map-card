@@ -9,6 +9,7 @@ export class NetworkMapCardEditor extends LitElement {
   private _allDiscoveredDevices: Array<{ mac: string; name: string; ip?: string }> = [];
   private _selectedIntegrationToAdd = '';
   private _expandedIntegrations: Set<number> = new Set([0]);
+  private _anonCopyStatus = '';
 
   static styles = css`
     :host {
@@ -329,6 +330,41 @@ export class NetworkMapCardEditor extends LitElement {
     this._fireConfigChanged();
   }
 
+  private async _copyAnonymizedDiagnostics(): Promise<void> {
+    if (!this._hass) return;
+    try {
+      this._anonCopyStatus = 'Generazione in corso...';
+      this.requestUpdate();
+
+      const result = await HaHelper.fetchClients(this._hass, this._config?.integrations || []);
+      const jsonStr = HaHelper.generateAnonymizedDiagnostics({
+        masterRootMac: this._config?.master_root_mac,
+        homeassistantMac: this._config?.homeassistant_mac,
+        layoutMode: this._config?.layout_mode || 'molecular',
+        integrations: this._config?.integrations || [],
+        clientsByConfigEntry: result.clientsByConfigEntry,
+      });
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(jsonStr);
+        this._anonCopyStatus = 'Report anonimo copiato negli appunti!';
+      } else {
+        prompt('Copia il report diagnostico anonimo:', jsonStr);
+        this._anonCopyStatus = 'Generato con successo!';
+      }
+
+      this.requestUpdate();
+      setTimeout(() => {
+        this._anonCopyStatus = '';
+        this.requestUpdate();
+      }, 4000);
+    } catch (err) {
+      console.error(err);
+      this._anonCopyStatus = 'Errore durante la generazione.';
+      this.requestUpdate();
+    }
+  }
+
   private _addIntegration(): void {
     if (!this._config || !this._selectedIntegrationToAdd || !this._hass) return;
 
@@ -611,6 +647,24 @@ export class NetworkMapCardEditor extends LitElement {
                 `
               : ''}
           </div>
+        </div>
+
+        <!-- 3. Supporto & Diagnostica Anonima -->
+        <div class="editor-section" style="margin-top: 24px; padding-top: 16px; border-top: 2px dashed var(--divider-color, #e0e0e0); text-align: center;">
+          <div class="section-title" style="margin-bottom: 8px;">Supporto & Diagnostica</div>
+          <button
+            type="button"
+            class="chip-btn"
+            style="padding: 8px 16px; font-weight: 600; background: var(--primary-color, #0288d1); color: white; border: none; cursor: pointer; font-size: 0.85rem;"
+            @click=${this._copyAnonymizedDiagnostics}
+          >
+            📋 Copia Diagnostica Anonima per GitHub
+          </button>
+          ${this._anonCopyStatus
+            ? html`<div style="margin-top: 8px; color: #2e7d32; font-weight: bold; font-size: 0.8rem;">✓ ${this._anonCopyStatus}</div>`
+            : html`<div style="margin-top: 8px; color: var(--secondary-text-color); font-size: 0.76rem; max-width: 320px; margin-left: auto; margin-right: auto;">
+                Sostituisce i veri MAC address, IP e Nomi con dati fittizi, mantenendo la topologia esatta per la riproduzione dei bug.
+              </div>`}
         </div>
       </div>
     `;

@@ -14,7 +14,7 @@ Il componente deduce i collegamenti fisici e logici combinando i dati provenient
 ## Caratteristiche
 
 *   **4 Stili di Grafo Selezionabili (`layout_mode`):**
-    *   **Molecolare (`molecular` - Predefinito):** Disposizione organica a scheletro portante rigido (router e interfacce a distanze calibrate e stabili) con dispositivi client mobili all'esterno. Mantiene sgombra l'area centrale inter-apparato ed è nativamente predisposto per topologie multi-router.
+    *   **Molecolare (`molecular` - Predefinito):** Disposizione organica a scheletro rigido con adattamento dinamico all'orientamento dello schermo (orizzontale su desktop, verticale su smartphone) e naturale inclinazione fluida.
     *   **Albero (`tree`):** Gerarchia verticale classica ordinata dall'alto verso il basso.
     *   **Radiale (`radial`):** Disposizione organica a raggiera attorno al router master.
     *   **Orizzontale (`horizontal`):** Flusso gerarchico da sinistra verso destra, ideale per schermi ultra-wide o pannelli orizzontali.

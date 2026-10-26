@@ -3,3 +3,5 @@ node_modules/
 *.local
 .idea/
 *.png
+preview.html
+report_test.txt

@@ -1,12 +1,13 @@
 {
   "name": "net_map",
-  "version": "2026.10.2",
+  "version": "2026.10.3",
   "description": "",
   "main": "index.js",
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "test": "vitest run"
+    "test": "vitest run",
+    "preview": "vitest run src/reproduce-issue.test.ts && open preview.html"
   },
   "keywords": [],
   "author": "vladeck",

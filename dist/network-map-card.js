@@ -17039,7 +17039,13 @@ var pF = class {
 				}
 				if (!d) continue;
 				let f;
-				n.link_attribute && l?.attributes?.[n.link_attribute] !== void 0 && (f = String(l.attributes[n.link_attribute]));
+				if (n.link_attribute) {
+					let e = l?.attributes?.[n.link_attribute];
+					if (e != null) {
+						let t = String(e).trim();
+						t && t.toLowerCase() !== "null" && t.toLowerCase() !== "none" && t.toLowerCase() !== "unknown" && (f = t);
+					}
+				}
 				let p = c?.name || l?.attributes?.friendly_name || l?.attributes?.host_name || void 0, m = t.name_by_user || t.name || void 0, h = p || m || d, g = l?.attributes?.ip || l?.attributes?.ip_address || l?.attributes?.ipv4, _ = l?.state, v = !l || _ === "home" || _ === "on" || _ === "connected", y = fF(f, l?.attributes, n.lan_values, n.wifi_values);
 				a.push({
 					mac: d,
@@ -17111,6 +17117,79 @@ var pF = class {
 			if (e && e[1]) return uF(e[1]);
 		}
 	}
+	static generateAnonymizedDiagnostics(e) {
+		let t = /* @__PURE__ */ new Map(), n = /* @__PURE__ */ new Map(), r = 1, i = 10, a = (e) => {
+			if (!e) return "";
+			let n = uF(e);
+			if (!n) return "";
+			if (!t.has(n)) {
+				let e = r.toString(16).padStart(2, "0");
+				t.set(n, `00:00:00:00:00:${e}`), r++;
+			}
+			return t.get(n);
+		}, o = (e) => {
+			if (!e) return;
+			let t = String(e).trim();
+			return n.has(t) || n.set(t, `192.168.1.${i++}`), n.get(t);
+		}, s = e.integrations.map((e, t) => {
+			let n = e.root_mac ? a(e.root_mac) : void 0;
+			return {
+				config_entry_id: `integration_entry_${t + 1}`,
+				root_mac: n,
+				name: `Integrazione Apparato ${t + 1}`,
+				is_master: !!e.is_master,
+				link_attribute: e.link_attribute,
+				lan_values: e.lan_values,
+				wifi_values: e.wifi_values
+			};
+		}), c = (e) => {
+			let t = String(e.attributes?.icon || "").toLowerCase(), n = `${e.name || ""} ${e.entityName || ""} ${e.attributes?.friendly_name || ""}`.toLowerCase();
+			return t.includes("television") ? "Smart TV" : t.includes("air-conditioner") ? "Climatizzatore" : t.includes("thermostat") ? "Termostato" : t.includes("washing-machine") ? "Lavatrice" : t.includes("dishwasher") ? "Lavastoviglie" : t.includes("fan") ? "Ventilatore" : t.includes("meter-electric") ? "Sensore Energia" : t.includes("solar-panel") ? "Inverter FV" : t.includes("nas") ? "NAS Storage" : t.includes("home-assistant") ? "Server Home Assistant" : t.includes("router") || t.includes("access-point") ? "Access Point / Router" : t.includes("laptop") ? "Computer" : t.includes("cellphone") ? "Smartphone" : t.includes("printer") ? "Stampante" : t.includes("car") ? "Infotainment Auto" : t.includes("light-switch") ? "Interruttore Luce" : t.includes("power-plug") || t.includes("plug") ? "Presa Smart" : t.includes("shield") ? "Server Sicurezza / DNS" : n.includes("tv") || n.includes("television") ? "Smart TV" : n.includes("clima") || n.includes("condizionat") || n.includes("net_ac") ? "Climatizzatore" : n.includes("termostato") || n.includes("thermostat") ? "Termostato" : n.includes("lavatrice") ? "Lavatrice" : n.includes("lavastoviglie") ? "Lavastoviglie" : n.includes("inverter") || n.includes("fv") || n.includes("solar") ? "Inverter FV" : n.includes("nas") || n.includes("qnap") || n.includes("synology") ? "NAS Storage" : n.includes("home assistant") || n.includes("homeassistant") ? "Server Home Assistant" : n.includes("router") || n.includes("re505") || n.includes("repeater") || n.includes("deco") || n.includes("ap") ? "Access Point / Router" : n.includes("macbook") || n.includes("laptop") || n.includes("pc") || n.includes("computer") ? "Computer" : n.includes("phone") || n.includes("galaxy") || n.includes("iphone") || n.includes("redmi") || n.includes("cellulare") ? "Smartphone" : n.includes("printer") || n.includes("stampante") || n.includes("epson") ? "Stampante" : n.includes("shelly") || n.includes("plug") || n.includes("switch") || n.includes("presa") ? "Modulo Smart (IoT)" : "Dispositivo";
+		}, l = {};
+		for (let t = 0; t < e.integrations.length; t++) {
+			let n = e.integrations[t].config_entry_id, r = `integration_entry_${t + 1}`;
+			l[r] = (e.clientsByConfigEntry.get(n) || []).map((e) => {
+				let t = a(e.mac), n = o(e.ip), r = t.slice(-2).toUpperCase(), i = c(e), s = `${i} [${r}]`, l;
+				return e.attributes && (l = { ...e.attributes }, l.mac && (l.mac = t), l.mac_address && (l.mac_address = t), l.ip && (l.ip = n), l.ip_address && (l.ip_address = n), l.friendly_name && (l.friendly_name = s), l.host_name && (l.host_name = s), l.hostname && (l.hostname = s)), {
+					mac: t,
+					name: s,
+					entityName: e.entityName ? `${i} Tracker [${r}]` : void 0,
+					deviceName: e.deviceName ? `${i} Hardware [${r}]` : void 0,
+					ip: n,
+					state: e.state,
+					isConnected: e.isConnected,
+					connectionType: e.connectionType,
+					linkInfo: e.linkInfo,
+					entityId: e.entityId ? `device_tracker.client_${t.replace(/:/g, "")}` : void 0,
+					deviceId: e.deviceId ? `device_${t.replace(/:/g, "")}` : void 0,
+					attributes: l
+				};
+			});
+		}
+		let u = ["type: custom:network-map-card", `layout_mode: ${e.layoutMode || "molecular"}`];
+		e.masterRootMac && u.push(`master_root_mac: "${a(e.masterRootMac)}"`), e.homeassistantMac && u.push(`homeassistant_mac: "${a(e.homeassistantMac)}"`), u.push("show_offline: true"), u.push("integrations:");
+		for (let e of s) {
+			if (u.push(`  - config_entry_id: "${e.config_entry_id}"`), e.is_master && u.push("    is_master: true"), e.root_mac && u.push(`    root_mac: "${e.root_mac}"`), e.link_attribute && u.push(`    link_attribute: "${e.link_attribute}"`), e.lan_values && (Array.isArray(e.lan_values) ? e.lan_values.length > 0 : e.lan_values)) {
+				let t = Array.isArray(e.lan_values) ? e.lan_values : [e.lan_values];
+				u.push(`    lan_values: ${JSON.stringify(t)}`);
+			}
+			if (e.wifi_values && (Array.isArray(e.wifi_values) ? e.wifi_values.length > 0 : e.wifi_values)) {
+				let t = Array.isArray(e.wifi_values) ? e.wifi_values : [e.wifi_values];
+				u.push(`    wifi_values: ${JSON.stringify(t)}`);
+			}
+		}
+		let d = {
+			schema_version: "1.0",
+			exported_at: (/* @__PURE__ */ new Date()).toISOString(),
+			card_config_yaml: u.join("\n"),
+			layoutMode: e.layoutMode || "molecular",
+			masterRootMac: e.masterRootMac ? a(e.masterRootMac) : void 0,
+			homeassistantMac: e.homeassistantMac ? a(e.homeassistantMac) : void 0,
+			integrations: s,
+			clientsByConfigEntry: l
+		};
+		return JSON.stringify(d, null, 2);
+	}
 };
 //#endregion
 //#region src/topology-engine.ts
@@ -17154,8 +17233,10 @@ var hF = class {
 			for (let e of u) {
 				let u = uF(e.mac);
 				if (!u || u === l) continue;
-				let f = e.linkInfo ? String(e.linkInfo).trim() : "", p = fF(f || void 0, e.attributes, c.lan_values, c.wifi_values);
-				f ||= p === "lan" ? "LAN" : p === "wifi" ? "Wi-Fi" : "Rete";
+				let f = e.linkInfo ? String(e.linkInfo).trim() : "";
+				(!f || f.toLowerCase() === "null" || f.toLowerCase() === "none" || f.toLowerCase() === "unknown") && (f = "");
+				let p = fF(f || void 0, e.attributes, c.lan_values, c.wifi_values);
+				f ||= p === "lan" ? "LAN" : p === "wifi" ? "Wi-Fi" : e.isConnected === !1 || e.state === "not_home" ? "Disconnessi" : "Non specificata";
 				let m = mF(f), h = `if_${l}_${m}`;
 				if (!r.has(h)) {
 					let e = f;
@@ -17276,7 +17357,7 @@ var hF = class {
 	}
 }, gF = class extends Le {
 	constructor(...e) {
-		super(...e), this._availableIntegrations = [], this._allDiscoveredDevices = [], this._selectedIntegrationToAdd = "", this._expandedIntegrations = /* @__PURE__ */ new Set([0]);
+		super(...e), this._availableIntegrations = [], this._allDiscoveredDevices = [], this._selectedIntegrationToAdd = "", this._expandedIntegrations = /* @__PURE__ */ new Set([0]), this._anonCopyStatus = "";
 	}
 	static {
 		this.styles = o`
@@ -17571,6 +17652,23 @@ var hF = class {
 			layout_mode: t.value
 		}, this._fireConfigChanged();
 	}
+	async _copyAnonymizedDiagnostics() {
+		if (this._hass) try {
+			this._anonCopyStatus = "Generazione in corso...", this.requestUpdate();
+			let e = await pF.fetchClients(this._hass, this._config?.integrations || []), t = pF.generateAnonymizedDiagnostics({
+				masterRootMac: this._config?.master_root_mac,
+				homeassistantMac: this._config?.homeassistant_mac,
+				layoutMode: this._config?.layout_mode || "molecular",
+				integrations: this._config?.integrations || [],
+				clientsByConfigEntry: e.clientsByConfigEntry
+			});
+			navigator.clipboard && navigator.clipboard.writeText ? (await navigator.clipboard.writeText(t), this._anonCopyStatus = "Report anonimo copiato negli appunti!") : (prompt("Copia il report diagnostico anonimo:", t), this._anonCopyStatus = "Generato con successo!"), this.requestUpdate(), setTimeout(() => {
+				this._anonCopyStatus = "", this.requestUpdate();
+			}, 4e3);
+		} catch (e) {
+			console.error(e), this._anonCopyStatus = "Errore durante la generazione.", this.requestUpdate();
+		}
+	}
 	_addIntegration() {
 		if (!this._config || !this._selectedIntegrationToAdd || !this._hass) return;
 		let e = this._selectedIntegrationToAdd, t = this._availableIntegrations.find((t) => t.id === e), n = t?.suggestedRootMac || pF.autoDetectRootMac(this._hass, e) || "", r = !this._config.integrations || this._config.integrations.length === 0, i = pF.scanAvailableAttributes(this._hass, e), a = i.find((e) => e.toLowerCase().includes("port") || e.toLowerCase().includes("channel")) || i[0] || "", o = {
@@ -17778,6 +17876,22 @@ var hF = class {
                 ` : ""}
           </div>
         </div>
+
+        <!-- 3. Supporto & Diagnostica Anonima -->
+        <div class="editor-section" style="margin-top: 24px; padding-top: 16px; border-top: 2px dashed var(--divider-color, #e0e0e0); text-align: center;">
+          <div class="section-title" style="margin-bottom: 8px;">Supporto & Diagnostica</div>
+          <button
+            type="button"
+            class="chip-btn"
+            style="padding: 8px 16px; font-weight: 600; background: var(--primary-color, #0288d1); color: white; border: none; cursor: pointer; font-size: 0.85rem;"
+            @click=${this._copyAnonymizedDiagnostics}
+          >
+            📋 Copia Diagnostica Anonima per GitHub
+          </button>
+          ${this._anonCopyStatus ? E`<div style="margin-top: 8px; color: #2e7d32; font-weight: bold; font-size: 0.8rem;">✓ ${this._anonCopyStatus}</div>` : E`<div style="margin-top: 8px; color: var(--secondary-text-color); font-size: 0.76rem; max-width: 320px; margin-left: auto; margin-right: auto;">
+                Sostituisce i veri MAC address, IP e Nomi con dati fittizi, mantenendo la topologia esatta per la riproduzione dei bug.
+              </div>`}
+        </div>
       </div>
     `;
 	}
@@ -17906,7 +18020,7 @@ customElements.get("network-map-card-editor") || customElements.define("network-
 //#region src/network-map-card.ts
 var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistant.io/homeassistant/icon.png", yF = class extends Le {
 	constructor(...e) {
-		super(...e), this._nodesDataSet = new nN([]), this._edgesDataSet = new nN([]), this._currentNodes = [], this._initialized = !1, this._isBuilding = !1, this._lastUpdateTime = 0, this._lastDataSignature = "", this._showIntegrationsList = !0, this._copyNotification = "", this._showOffline = !0, this._interfaceChildrenMap = /* @__PURE__ */ new Map(), this._nodeParentMap = /* @__PURE__ */ new Map(), this._currentLayoutMode = "";
+		super(...e), this._nodesDataSet = new nN([]), this._edgesDataSet = new nN([]), this._currentNodes = [], this._initialized = !1, this._isBuilding = !1, this._lastUpdateTime = 0, this._lastDataSignature = "", this._showIntegrationsList = !0, this._copyNotification = "", this._showOffline = !0, this._interfaceChildrenMap = /* @__PURE__ */ new Map(), this._nodeParentMap = /* @__PURE__ */ new Map(), this._lastAspectOrientation = "landscape", this._currentLayoutMode = "";
 	}
 	static {
 		this.styles = o`
@@ -18379,7 +18493,14 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
 	_setupResizeObserver() {
 		if (this._resizeObserver &&= (this._resizeObserver.disconnect(), void 0), window.ResizeObserver) {
 			this._resizeObserver = new ResizeObserver((e) => {
-				for (let t of e) t.contentRect.width > 0 && t.contentRect.height > 0 && (this._network ? (this._network.setSize("100%", "100%"), this._network.redraw()) : this._initNetwork());
+				for (let t of e) if (t.contentRect.width > 0 && t.contentRect.height > 0) {
+					let e = t.contentRect.width, n = t.contentRect.height, r = e >= n * 1.05 ? "landscape" : n > e * 1.05 ? "portrait" : "square";
+					if ((this._currentLayoutMode || this._config?.layout_mode) === "molecular" && this._lastAspectOrientation && this._lastAspectOrientation !== r) {
+						this._lastAspectOrientation = r, this._lastDataSignature = "", this._updateTopology();
+						return;
+					}
+					this._lastAspectOrientation = r, this._network ? (this._network.setSize("100%", "100%"), this._network.redraw()) : this._initNetwork();
+				}
 			});
 			let e = this.shadowRoot?.querySelector(".card-content-area");
 			e && this._resizeObserver.observe(e);
@@ -18577,53 +18698,63 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
 		}
 	}
 	async _updateTopology() {
-		if (this._hass && this._config && !this._isBuilding) {
+		if (!this._config || this._isBuilding) return;
+		let e = this._config._debug_data;
+		if (this._hass || e) {
 			this._isBuilding = !0, this._lastUpdateTime = Date.now();
 			try {
-				let e = (this._config.integrations || []).map((e) => {
-					let t = e.root_mac;
-					return !t && this._hass && (t = pF.autoDetectRootMac(this._hass, e.config_entry_id) || ""), {
-						...e,
-						root_mac: t || ""
+				let t = (this._config.integrations || []).map((t) => {
+					let n = t.root_mac;
+					return !n && this._hass && !e && (n = pF.autoDetectRootMac(this._hass, t.config_entry_id) || ""), {
+						...t,
+						root_mac: n || ""
 					};
-				}), t = this._config.master_root_mac;
-				!t && e.length > 0 && (t = (e.find((e) => e.is_master) || e[0])?.root_mac || "");
-				let n = await pF.fetchClients(this._hass, e);
-				this._diagnostics = n.diagnostics;
-				let r = hF.buildGraph({
-					masterRootMac: t || "",
-					integrations: e,
-					clientsByConfigEntry: n.clientsByConfigEntry,
-					rootNames: n.rootNames,
+				}), n = this._config.master_root_mac;
+				!n && t.length > 0 && (n = (t.find((e) => e.is_master) || t[0])?.root_mac || "");
+				let r, i;
+				if (e && e.clientsByConfigEntry) {
+					r = /* @__PURE__ */ new Map();
+					for (let [t, n] of Object.entries(e.clientsByConfigEntry)) r.set(t, n);
+					if (i = /* @__PURE__ */ new Map(), e.rootNames) for (let [t, n] of Object.entries(e.rootNames)) i.set(t, n);
+				} else {
+					if (!this._hass) return;
+					let e = await pF.fetchClients(this._hass, t);
+					this._diagnostics = e.diagnostics, r = e.clientsByConfigEntry, i = e.rootNames;
+				}
+				let a = hF.buildGraph({
+					masterRootMac: n || "",
+					integrations: t,
+					clientsByConfigEntry: r,
+					rootNames: i,
 					homeassistantMac: this._config.homeassistant_mac
 				});
-				this._currentNodes = r.nodes;
-				let i = JSON.stringify({
-					n: r.nodes.map((e) => `${e.id}:${e.label}:${e.isConnected}:${e.ip}:${e.isHomeAssistant}`),
-					e: r.edges.map((e) => `${e.from}->${e.to}:${e.label}:${e.connectionType}`),
+				this._currentNodes = a.nodes;
+				let o = JSON.stringify({
+					n: a.nodes.map((e) => `${e.id}:${e.label}:${e.isConnected}:${e.ip}:${e.isHomeAssistant}`),
+					e: a.edges.map((e) => `${e.from}->${e.to}:${e.label}:${e.connectionType}`),
 					offline: this._showOffline,
 					layout: this._config.layout_mode || "molecular",
 					ha: this._config.homeassistant_mac
 				});
-				if (i === this._lastDataSignature) return;
-				this._lastDataSignature = i;
-				let a = this._hass?.themes?.darkMode ?? window.matchMedia("(prefers-color-scheme: dark)").matches, o = this._config.layout_mode || "molecular", s = o === "tree" || o === "horizontal";
-				if (this._network && this._currentLayoutMode && this._currentLayoutMode !== o) {
-					this._currentLayoutMode = o, this._recreateNetwork();
+				if (o === this._lastDataSignature) return;
+				this._lastDataSignature = o;
+				let s = this._hass?.themes?.darkMode ?? window.matchMedia("(prefers-color-scheme: dark)").matches, c = this._config.layout_mode || "molecular", l = c === "tree" || c === "horizontal";
+				if (this._network && this._currentLayoutMode && this._currentLayoutMode !== c) {
+					this._currentLayoutMode = c, this._recreateNetwork();
 					return;
 				}
-				this._currentLayoutMode = o;
-				let c = r.nodes, l = r.edges;
+				this._currentLayoutMode = c;
+				let u = a.nodes, d = a.edges;
 				if (!this._showOffline) {
-					let e = new Set(c.filter((e) => e.isRoot || e.isInterface || e.isConnected !== !1).map((e) => e.id));
-					l = l.filter((t) => e.has(t.from) && e.has(t.to));
+					let e = new Set(u.filter((e) => e.isRoot || e.isInterface || e.isConnected !== !1).map((e) => e.id));
+					d = d.filter((t) => e.has(t.from) && e.has(t.to));
 					let t = /* @__PURE__ */ new Map();
-					for (let e of l) t.set(e.from, (t.get(e.from) || 0) + 1);
-					c = c.filter((e) => e.isRoot ? !0 : e.isInterface ? (t.get(e.id) || 0) > 0 : e.isConnected !== !1);
-					let n = new Set(c.map((e) => e.id));
-					l = l.filter((e) => n.has(e.from) && n.has(e.to));
+					for (let e of d) t.set(e.from, (t.get(e.from) || 0) + 1);
+					u = u.filter((e) => e.isRoot ? !0 : e.isInterface ? (t.get(e.id) || 0) > 0 : e.isConnected !== !1);
+					let n = new Set(u.map((e) => e.id));
+					d = d.filter((e) => n.has(e.from) && n.has(e.to));
 				}
-				c.sort((e, t) => {
+				u.sort((e, t) => {
 					if (e.isMasterRoot) return -1;
 					if (t.isMasterRoot) return 1;
 					if (e.isInterface && !t.isInterface) return -1;
@@ -18634,84 +18765,184 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
 						sensitivity: "base"
 					});
 				});
-				let u = /* @__PURE__ */ new Map();
-				for (let e of l) u.has(e.from) || u.set(e.from, []), u.get(e.from).push(e.to);
-				for (let [e, t] of u.entries()) t.sort((e, t) => {
-					let n = c.find((t) => t.id === e), r = c.find((e) => e.id === t), i = n?.interfaceName || n?.label || e, a = r?.interfaceName || r?.label || t;
+				let f = /* @__PURE__ */ new Map();
+				for (let e of d) f.has(e.from) || f.set(e.from, []), f.get(e.from).push(e.to);
+				for (let [e, t] of f.entries()) t.sort((e, t) => {
+					let n = u.find((t) => t.id === e), r = u.find((e) => e.id === t), i = n?.interfaceName || n?.label || e, a = r?.interfaceName || r?.label || t;
 					return i.localeCompare(a, void 0, {
 						numeric: !0,
 						sensitivity: "base"
 					});
 				});
 				this._nodeParentMap = /* @__PURE__ */ new Map(), this._interfaceChildrenMap = /* @__PURE__ */ new Map();
-				for (let e of l) this._nodeParentMap.set(e.to, e.from);
-				for (let e of c) if (e.isInterface) {
-					let t = u.get(e.id) || [];
+				for (let e of d) this._nodeParentMap.set(e.to, e.from);
+				for (let e of u) if (e.isInterface) {
+					let t = f.get(e.id) || [];
 					t.length > 0 && this._interfaceChildrenMap.set(e.id, t);
 				}
-				let d = (c.find((e) => e.isMasterRoot) || c.find((e) => e.isRoot) || c[0])?.id, f = /* @__PURE__ */ new Map();
-				if (!s && d) {
-					if (o === "molecular") {
-						f.set(d, {
+				let p = (u.find((e) => e.isMasterRoot) || u.find((e) => e.isRoot) || u[0])?.id, m = /* @__PURE__ */ new Map();
+				if (!l && p) {
+					if (c === "molecular") {
+						m.set(p, {
 							x: 0,
 							y: 0
 						});
 						let e = (t, n) => {
 							n.add(t);
-							let r = (u.get(t) || []).filter((e) => !n.has(e)), i = 1;
+							let r = (f.get(t) || []).filter((e) => !n.has(e)), i = 1;
 							for (let t of r) i += e(t, n);
 							return i;
-						}, t = u.get(d) || [], n = t.map((t) => e(t, /* @__PURE__ */ new Set([d]))), r = n.reduce((e, t) => e + t, 0) || 1, i = -Math.PI / 2;
-						t.forEach((t, a) => {
-							let o = n[a] / r * 2 * Math.PI, s = i + o / 2;
-							i += o;
-							let c = Math.cos(s) * 120, l = Math.sin(s) * 120;
-							f.set(t, {
-								x: c,
-								y: l
+						}, t = (e, n) => {
+							n.add(e);
+							let r = u.find((t) => t.id === e);
+							if (r?.isRoot && !r.isMasterRoot) return !0;
+							let i = (f.get(e) || []).filter((e) => !n.has(e));
+							for (let e of i) if (t(e, n)) return !0;
+							return !1;
+						}, n = f.get(p) || [], r = this.shadowRoot?.querySelector(".network-container"), i = r?.clientWidth || (typeof window < "u" ? window.innerWidth : 800), a = r?.clientHeight || (typeof window < "u" ? window.innerHeight : 600), o = i / Math.max(1, a), s = o >= 1.05, c = o < .95, l = s ? Math.min(1.45, Math.max(1, Math.sqrt(o))) : 1, d = c ? Math.min(1.45, Math.max(1, Math.sqrt(1 / o))) : 1, h = [], g = [];
+						for (let e of n) t(e, /* @__PURE__ */ new Set([p])) ? h.push(e) : g.push(e);
+						let _ = /* @__PURE__ */ new Map();
+						if (h.length > 0 && (s || c)) {
+							if (s) {
+								let e = -.16;
+								if (h.length === 1) _.set(h[0], {
+									angle: -.16,
+									span: Math.PI * .7
+								});
+								else if (h.length === 2) _.set(h[0], {
+									angle: -.16,
+									span: Math.PI * .65
+								}), _.set(h[1], {
+									angle: Math.PI + e,
+									span: Math.PI * .65
+								});
+								else {
+									let t = Math.PI * .8 / (h.length - 1);
+									h.forEach((n, r) => {
+										let i = -Math.PI * .4 + r * t + e;
+										_.set(n, {
+											angle: i,
+											span: t * .9
+										});
+									});
+								}
+								let t = [], n = [];
+								g.forEach((e, r) => {
+									r % 2 == 0 ? t.push(e) : n.push(e);
+								});
+								let r = (e, t) => {
+									if (e.length === 0) return;
+									let n = Math.min(Math.PI * .85, .45 * e.length + .3), r = e.length > 1 ? n / (e.length - 1) : 0;
+									e.forEach((i, a) => {
+										let o = e.length === 1 ? t : t - n / 2 + a * r;
+										_.set(i, {
+											angle: o,
+											span: r || Math.PI * .4
+										});
+									});
+								};
+								r(t, -Math.PI / 2 + e), r(n, Math.PI / 2 + e);
+							} else {
+								let e = .16;
+								if (h.length === 1) _.set(h[0], {
+									angle: Math.PI / 2 + e,
+									span: Math.PI * .7
+								});
+								else if (h.length === 2) _.set(h[0], {
+									angle: Math.PI / 2 + e,
+									span: Math.PI * .65
+								}), _.set(h[1], {
+									angle: -Math.PI / 2 + e,
+									span: Math.PI * .65
+								});
+								else {
+									let t = Math.PI * .8 / (h.length - 1);
+									h.forEach((n, r) => {
+										let i = Math.PI * .1 + r * t + e;
+										_.set(n, {
+											angle: i,
+											span: t * .9
+										});
+									});
+								}
+								let t = [], n = [];
+								g.forEach((e, r) => {
+									r % 2 == 0 ? n.push(e) : t.push(e);
+								});
+								let r = (e, t) => {
+									if (e.length === 0) return;
+									let n = Math.min(Math.PI * .85, .45 * e.length + .3), r = e.length > 1 ? n / (e.length - 1) : 0;
+									e.forEach((i, a) => {
+										let o = e.length === 1 ? t : t - n / 2 + a * r;
+										_.set(i, {
+											angle: o,
+											span: r || Math.PI * .4
+										});
+									});
+								};
+								r(n, .16), r(t, Math.PI + e);
+							}
+						} else {
+							let t = n.map((t) => e(t, /* @__PURE__ */ new Set([p]))), r = t.reduce((e, t) => e + t, 0) || 1, i = s ? 0 : -Math.PI / 2;
+							n.forEach((e, n) => {
+								let a = t[n] / r * 2 * Math.PI, o = i + a / 2;
+								i += a, _.set(e, {
+									angle: o,
+									span: a
+								});
 							});
-							let p = (t, n, r, i, a, o, s) => {
-								s.add(t);
-								let c = (u.get(t) || []).filter((e) => !s.has(e));
-								if (c.length === 0) return;
-								let l = c.length;
-								if (l === 1) {
-									let e = c[0], t = n + Math.cos(i) * o, l = r + Math.sin(i) * o;
-									f.set(e, {
+						}
+						n.forEach((t) => {
+							let n = _.get(t) || {
+								angle: 0,
+								span: Math.PI / 2
+							}, r = n.angle, i = n.span, a = Math.cos(r) * 120 * l, o = Math.sin(r) * 120 * d;
+							m.set(t, {
+								x: a,
+								y: o
+							});
+							let s = (t, n, r, i, a, o, c) => {
+								c.add(t);
+								let u = (f.get(t) || []).filter((e) => !c.has(e));
+								if (u.length === 0) return;
+								let p = u.length;
+								if (p === 1) {
+									let e = u[0], t = n + Math.cos(i) * o * l, f = r + Math.sin(i) * o * d;
+									m.set(e, {
 										x: t,
-										y: l
-									}), p(e, t, l, i, a, 95, s);
+										y: f
+									}), s(e, t, f, i, a, 95, c);
 									return;
 								}
-								let d = c.map((t) => e(t, new Set(s))), m = d.reduce((e, t) => e + t, 0) || 1, h = Math.min(a * .9, Math.PI * .82), g = i - h / 2;
-								c.forEach((e, t) => {
-									let i = d[t] / m * h, a = g + i / 2;
-									g += i;
-									let c = Math.max(95, Math.min(210, 80 + l * 7)), u = n + Math.cos(a) * c, _ = r + Math.sin(a) * c;
-									f.set(e, {
-										x: u,
-										y: _
-									}), p(e, u, _, a, i, o + 15, s);
+								let h = u.map((t) => e(t, new Set(c))), g = h.reduce((e, t) => e + t, 0) || 1, _ = Math.min(a * .9, Math.PI * .82), v = i - _ / 2;
+								u.forEach((e, t) => {
+									let i = h[t] / g * _, a = v + i / 2;
+									v += i;
+									let u = Math.max(95, Math.min(210, 80 + p * 7)), f = n + Math.cos(a) * u * l, y = r + Math.sin(a) * u * d;
+									m.set(e, {
+										x: f,
+										y
+									}), s(e, f, y, a, i, o + 15, c);
 								});
 							};
-							p(t, c, l, s, o, 115, /* @__PURE__ */ new Set([d]));
+							s(t, a, o, r, i, 115, /* @__PURE__ */ new Set([p]));
 						});
 					} else {
-						f.set(d, {
+						m.set(p, {
 							x: 0,
 							y: 0
 						});
-						let e = u.get(d) || [], t = Math.max(1, e.length);
+						let e = f.get(p) || [], t = Math.max(1, e.length);
 						e.forEach((e, n) => {
 							let r = n / t * 2 * Math.PI - Math.PI / 2, i = Math.cos(r) * 150, a = Math.sin(r) * 150;
-							f.set(e, {
+							m.set(e, {
 								x: i,
 								y: a
 							});
-							let o = u.get(e) || [], s = o.length;
+							let o = f.get(e) || [], s = o.length;
 							o.forEach((e, t) => {
 								let n = s > 2 ? t / s * 2 * Math.PI : r - Math.PI / 4 + t / s * (Math.PI / 2), o = i + Math.cos(n) * 165, c = a + Math.sin(n) * 165;
-								f.set(e, {
+								m.set(e, {
 									x: o,
 									y: c
 								});
@@ -18719,18 +18950,18 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
 						});
 					}
 				}
-				let p = o === "molecular", m = c.map((e) => {
-					let t = e.isMasterRoot || e.id === d, n = f.get(e.id), r = !1;
-					s || (p ? (e.isMasterRoot || e.isRoot || e.isInterface) && (r = {
+				let h = c === "molecular", g = u.map((e) => {
+					let t = e.isMasterRoot || e.id === p, n = m.get(e.id), r = !1;
+					l || (h ? (e.isMasterRoot || e.isRoot || e.isInterface) && (r = {
 						x: !0,
 						y: !0
 					}) : t && (r = {
 						x: !0,
 						y: !0
 					}));
-					let i = n ? n.x : void 0, o = n ? n.y : void 0;
+					let i = n ? n.x : void 0, a = n ? n.y : void 0;
 					if (e.isInterface) {
-						let t = e.connectionType === "lan", n = e.connectionType === "wifi";
+						let t = e.connectionType === "lan", n = e.connectionType === "wifi", o = e.interfaceName?.toLowerCase().includes("disconness") || e.interfaceName?.toLowerCase().includes("offline");
 						return {
 							id: e.id,
 							label: `<b>${e.label}</b>`,
@@ -18739,22 +18970,22 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
 							margin: 6,
 							borderRadius: 6,
 							borderWidth: 1.5,
-							level: s ? e.depth ?? 1 : void 0,
-							x: s ? void 0 : i,
-							y: s ? void 0 : o,
-							fixed: !s && r,
+							level: l ? e.depth ?? 1 : void 0,
+							x: l ? void 0 : i,
+							y: l ? void 0 : a,
+							fixed: !l && r,
 							color: {
-								background: a ? t ? "#162836" : "#122927" : t ? "#e3f2fd" : "#e0f2f1",
-								border: t ? "#1976d2" : n ? "#00897b" : "#757575",
+								background: s ? o ? "#262626" : t ? "#162836" : "#122927" : o ? "#f0f0f0" : t ? "#e3f2fd" : "#e0f2f1",
+								border: o ? "#9e9e9e" : t ? "#1976d2" : n ? "#00897b" : "#757575",
 								highlight: {
-									background: t ? "#bbdefb" : "#b2dfdb",
-									border: "#0288d1"
+									background: o ? "#e0e0e0" : t ? "#bbdefb" : "#b2dfdb",
+									border: o ? "#757575" : "#0288d1"
 								}
 							},
 							font: {
 								multi: "html",
 								size: 11,
-								color: a ? "#e0e0e0" : "#212121",
+								color: s ? o ? "#9e9e9e" : "#e0e0e0" : o ? "#757575" : "#212121",
 								face: "Roboto, sans-serif"
 							}
 						};
@@ -18769,15 +19000,15 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
 							image: _F,
 							brokenImage: vF,
 							size: 13,
-							level: s ? e.depth ?? 0 : void 0,
-							x: s ? void 0 : i,
-							y: s ? void 0 : o,
-							fixed: !s && r,
+							level: l ? e.depth ?? 0 : void 0,
+							x: l ? void 0 : i,
+							y: l ? void 0 : a,
+							fixed: !l && r,
 							font: {
 								multi: "html",
-								color: a ? "#e0e0e0" : "#212121",
+								color: s ? "#e0e0e0" : "#212121",
 								ital: {
-									color: a ? "#90caf9" : "#1565c0",
+									color: s ? "#90caf9" : "#1565c0",
 									size: 10,
 									mod: "normal"
 								},
@@ -18788,75 +19019,75 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
 							}
 						};
 					}
-					let c = {
+					let o = {
 						background: "#4caf50",
 						border: "#388e3c",
 						highlight: {
 							background: "#66bb6a",
 							border: "#2e7d32"
 						}
-					}, l = 11, u = 2;
-					e.isMasterRoot ? (c = {
+					}, c = 11, u = 2;
+					e.isMasterRoot ? (o = {
 						background: "#0d47a1",
-						border: a ? "#90caf9" : "#1565c0",
+						border: s ? "#90caf9" : "#1565c0",
 						highlight: {
 							background: "#1565c0",
 							border: "#ffb300"
 						}
-					}, l = 21, u = 3.5) : e.isRoot ? (c = {
+					}, c = 21, u = 3.5) : e.isRoot ? (o = {
 						background: "#0288d1",
 						border: "#01579b",
 						highlight: {
 							background: "#03a9f4",
 							border: "#0277bd"
 						}
-					}, l = 15, u = 2.5) : e.isConnected === !1 && (c = {
-						background: a ? "#616161" : "#9e9e9e",
-						border: a ? "#424242" : "#757575",
+					}, c = 15, u = 2.5) : e.isConnected === !1 && (o = {
+						background: s ? "#616161" : "#9e9e9e",
+						border: s ? "#424242" : "#757575",
 						highlight: {
 							background: "#bdbdbd",
 							border: "#616161"
 						}
-					}, l = 9);
-					let m = `<b>${e.label}</b>`;
-					e.ip && (m += `\n<i>${e.ip}</i>`);
-					let h = `<b>${e.label}</b><br/>MAC: ${e.mac}${e.ip ? `<br/>IP: ${e.ip}` : ""}${e.connectionType ? `<br/>Tipo: ${e.connectionType.toUpperCase()}` : ""}${e.state ? `<br/>Stato: ${e.state}` : ""}`;
+					}, c = 9);
+					let d = `<b>${e.label}</b>`;
+					e.ip && (d += `\n<i>${e.ip}</i>`);
+					let f = `<b>${e.label}</b><br/>MAC: ${e.mac}${e.ip ? `<br/>IP: ${e.ip}` : ""}${e.connectionType ? `<br/>Tipo: ${e.connectionType.toUpperCase()}` : ""}${e.state ? `<br/>Stato: ${e.state}` : ""}`;
 					return {
 						id: e.id,
-						label: m,
-						title: h,
+						label: d,
+						title: f,
 						shape: "dot",
-						size: l,
+						size: c,
 						borderWidth: u,
-						color: c,
-						level: s ? e.depth ?? 0 : void 0,
-						x: s ? void 0 : i,
-						y: s ? void 0 : o,
-						fixed: !s && r,
+						color: o,
+						level: l ? e.depth ?? 0 : void 0,
+						x: l ? void 0 : i,
+						y: l ? void 0 : a,
+						fixed: !l && r,
 						font: {
 							multi: "html",
-							color: a ? "#e0e0e0" : "#212121",
+							color: s ? "#e0e0e0" : "#212121",
 							ital: {
-								color: a ? "#90caf9" : "#1565c0",
+								color: s ? "#90caf9" : "#1565c0",
 								size: 10,
 								mod: "normal"
 							},
 							bold: {
-								color: a ? "#ffffff" : "#111111",
+								color: s ? "#ffffff" : "#111111",
 								size: e.isMasterRoot ? 13 : 12
 							}
 						}
 					};
-				}), h = l.map((e) => {
-					let t = e.connectionType === "lan", n = e.connectionType === "wifi", r = o === "molecular", i = a ? "#555555" : "#bbbbbb", s = !1, c = 1.6, l = r ? 85 : 95;
-					r && e.from === d ? l = 115 : t ? (s = !1, c = 2.2, i = a ? "#64b5f6" : "#1976d2", l = r ? 105 : 90) : n && (s = [5, 5], c = 1.4, i = a ? "#4db6ac" : "#00897b", l = r ? 115 : 105);
+				}), _ = d.map((e) => {
+					let t = e.connectionType === "lan", n = e.connectionType === "wifi", r = c === "molecular", i = s ? "#555555" : "#bbbbbb", a = !1, o = 1.6, l = r ? 85 : 95;
+					r && e.from === p ? l = 115 : t ? (a = !1, o = 2.2, i = s ? "#64b5f6" : "#1976d2", l = r ? 105 : 90) : n && (a = [5, 5], o = 1.4, i = s ? "#4db6ac" : "#00897b", l = r ? 115 : 105);
 					let u = {
 						enabled: !0,
 						type: "cubicBezier",
-						forceDirection: o === "horizontal" ? "horizontal" : "vertical",
+						forceDirection: c === "horizontal" ? "horizontal" : "vertical",
 						roundness: t ? .08 : .22
 					};
-					return (o === "radial" || o === "molecular") && (u = {
+					return (c === "radial" || c === "molecular") && (u = {
 						enabled: !0,
 						type: "continuous",
 						roundness: .2
@@ -18865,8 +19096,8 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
 						from: e.from,
 						to: e.to,
 						label: e.label || "",
-						dashes: s,
-						width: c,
+						dashes: a,
+						width: o,
 						length: l,
 						arrows: {
 							to: { enabled: !1 },
@@ -18879,7 +19110,7 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
 						smooth: u
 					};
 				});
-				if (this._nodesDataSet.clear(), this._nodesDataSet.add(m), this._edgesDataSet.clear(), this._edgesDataSet.add(h), this._network && m.length > 0) try {
+				if (this._nodesDataSet.clear(), this._nodesDataSet.add(g), this._edgesDataSet.clear(), this._edgesDataSet.add(_), this._network && g.length > 0) try {
 					this._network.fit({ animation: !1 });
 				} catch {}
 			} catch (e) {

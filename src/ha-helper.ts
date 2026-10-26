@@ -348,8 +348,19 @@ export class HaHelper {
         }
 
         let linkInfo: string | undefined = undefined;
-        if (integration.link_attribute && entityState?.attributes?.[integration.link_attribute] !== undefined) {
-          linkInfo = String(entityState.attributes[integration.link_attribute]);
+        if (integration.link_attribute) {
+          const rawLink = entityState?.attributes?.[integration.link_attribute];
+          if (rawLink !== undefined && rawLink !== null) {
+            const trimmed = String(rawLink).trim();
+            if (
+              trimmed &&
+              trimmed.toLowerCase() !== 'null' &&
+              trimmed.toLowerCase() !== 'none' &&
+              trimmed.toLowerCase() !== 'unknown'
+            ) {
+              linkInfo = trimmed;
+            }
+          }
         }
 
         const entityName =
@@ -519,5 +530,190 @@ export class HaHelper {
       }
     }
     return undefined;
+  }
+
+  /**
+   * Generates a completely anonymized, privacy-safe diagnostic JSON payload
+   * containing exact topology inputs without any real MACs, IPs, or personal names.
+   */
+  public static generateAnonymizedDiagnostics(input: {
+    masterRootMac?: string;
+    homeassistantMac?: string;
+    layoutMode?: string;
+    integrations: IntegrationConfig[];
+    clientsByConfigEntry: Map<string, DiscoveredClient[]>;
+  }): string {
+    const macMap = new Map<string, string>();
+    const ipMap = new Map<string, string>();
+    let macCounter = 1;
+    let ipCounter = 10;
+
+    const getAnonMac = (mac?: string): string => {
+      if (!mac) return '';
+      const norm = normalizeMac(mac);
+      if (!norm) return '';
+      if (!macMap.has(norm)) {
+        const hex = macCounter.toString(16).padStart(2, '0');
+        macMap.set(norm, `00:00:00:00:00:${hex}`);
+        macCounter++;
+      }
+      return macMap.get(norm)!;
+    };
+
+    const getAnonIp = (ip?: string): string | undefined => {
+      if (!ip) return undefined;
+      const cleanIp = String(ip).trim();
+      if (!ipMap.has(cleanIp)) {
+        ipMap.set(cleanIp, `192.168.1.${ipCounter++}`);
+      }
+      return ipMap.get(cleanIp);
+    };
+
+    // Anonymize integrations
+    const anonIntegrations: IntegrationConfig[] = input.integrations.map((int, idx) => {
+      const anonRoot = int.root_mac ? getAnonMac(int.root_mac) : undefined;
+      return {
+        config_entry_id: `integration_entry_${idx + 1}`,
+        root_mac: anonRoot,
+        name: `Integrazione Apparato ${idx + 1}`,
+        is_master: Boolean(int.is_master),
+        link_attribute: int.link_attribute,
+        lan_values: int.lan_values,
+        wifi_values: int.wifi_values,
+      };
+    });
+
+    const inferCategory = (client: DiscoveredClient): string => {
+      const icon = String(client.attributes?.icon || '').toLowerCase();
+      const rawText = `${client.name || ''} ${client.entityName || ''} ${client.attributes?.friendly_name || ''}`.toLowerCase();
+
+      // 1. Icon matches
+      if (icon.includes('television')) return 'Smart TV';
+      if (icon.includes('air-conditioner')) return 'Climatizzatore';
+      if (icon.includes('thermostat')) return 'Termostato';
+      if (icon.includes('washing-machine')) return 'Lavatrice';
+      if (icon.includes('dishwasher')) return 'Lavastoviglie';
+      if (icon.includes('fan')) return 'Ventilatore';
+      if (icon.includes('meter-electric')) return 'Sensore Energia';
+      if (icon.includes('solar-panel')) return 'Inverter FV';
+      if (icon.includes('nas')) return 'NAS Storage';
+      if (icon.includes('home-assistant')) return 'Server Home Assistant';
+      if (icon.includes('router') || icon.includes('access-point')) return 'Access Point / Router';
+      if (icon.includes('laptop')) return 'Computer';
+      if (icon.includes('cellphone')) return 'Smartphone';
+      if (icon.includes('printer')) return 'Stampante';
+      if (icon.includes('car')) return 'Infotainment Auto';
+      if (icon.includes('light-switch')) return 'Interruttore Luce';
+      if (icon.includes('power-plug') || icon.includes('plug')) return 'Presa Smart';
+      if (icon.includes('shield')) return 'Server Sicurezza / DNS';
+
+      // 2. Keyword fallback matches
+      if (rawText.includes('tv') || rawText.includes('television')) return 'Smart TV';
+      if (rawText.includes('clima') || rawText.includes('condizionat') || rawText.includes('net_ac')) return 'Climatizzatore';
+      if (rawText.includes('termostato') || rawText.includes('thermostat')) return 'Termostato';
+      if (rawText.includes('lavatrice')) return 'Lavatrice';
+      if (rawText.includes('lavastoviglie')) return 'Lavastoviglie';
+      if (rawText.includes('inverter') || rawText.includes('fv') || rawText.includes('solar')) return 'Inverter FV';
+      if (rawText.includes('nas') || rawText.includes('qnap') || rawText.includes('synology')) return 'NAS Storage';
+      if (rawText.includes('home assistant') || rawText.includes('homeassistant')) return 'Server Home Assistant';
+      if (rawText.includes('router') || rawText.includes('re505') || rawText.includes('repeater') || rawText.includes('deco') || rawText.includes('ap')) return 'Access Point / Router';
+      if (rawText.includes('macbook') || rawText.includes('laptop') || rawText.includes('pc') || rawText.includes('computer')) return 'Computer';
+      if (rawText.includes('phone') || rawText.includes('galaxy') || rawText.includes('iphone') || rawText.includes('redmi') || rawText.includes('cellulare')) return 'Smartphone';
+      if (rawText.includes('printer') || rawText.includes('stampante') || rawText.includes('epson')) return 'Stampante';
+      if (rawText.includes('shelly') || rawText.includes('plug') || rawText.includes('switch') || rawText.includes('presa')) return 'Modulo Smart (IoT)';
+
+      return 'Dispositivo';
+    };
+
+    // Anonymize clients by config entry
+    const anonClientsRecord: Record<string, DiscoveredClient[]> = {};
+    for (let i = 0; i < input.integrations.length; i++) {
+      const origEntryId = input.integrations[i].config_entry_id;
+      const anonEntryId = `integration_entry_${i + 1}`;
+      const origClients = input.clientsByConfigEntry.get(origEntryId) || [];
+
+      anonClientsRecord[anonEntryId] = origClients.map((client) => {
+        const anonMac = getAnonMac(client.mac);
+        const anonIp = getAnonIp(client.ip);
+        const suffix = anonMac.slice(-2).toUpperCase();
+        const category = inferCategory(client);
+        const anonLabel = `${category} [${suffix}]`;
+
+        let anonAttributes: Record<string, any> | undefined = undefined;
+        if (client.attributes) {
+          anonAttributes = { ...client.attributes };
+          if (anonAttributes.mac) anonAttributes.mac = anonMac;
+          if (anonAttributes.mac_address) anonAttributes.mac_address = anonMac;
+          if (anonAttributes.ip) anonAttributes.ip = anonIp;
+          if (anonAttributes.ip_address) anonAttributes.ip_address = anonIp;
+          if (anonAttributes.friendly_name) anonAttributes.friendly_name = anonLabel;
+          if (anonAttributes.host_name) anonAttributes.host_name = anonLabel;
+          if (anonAttributes.hostname) anonAttributes.hostname = anonLabel;
+        }
+
+        return {
+          mac: anonMac,
+          name: anonLabel,
+          entityName: client.entityName ? `${category} Tracker [${suffix}]` : undefined,
+          deviceName: client.deviceName ? `${category} Hardware [${suffix}]` : undefined,
+          ip: anonIp,
+          state: client.state,
+          isConnected: client.isConnected,
+          connectionType: client.connectionType,
+          linkInfo: client.linkInfo,
+          entityId: client.entityId ? `device_tracker.client_${anonMac.replace(/:/g, '')}` : undefined,
+          deviceId: client.deviceId ? `device_${anonMac.replace(/:/g, '')}` : undefined,
+          attributes: anonAttributes,
+        };
+      });
+    }
+
+    // Generate clean YAML string representing the anonymized card configuration
+    const yamlLines: string[] = [
+      'type: custom:network-map-card',
+      `layout_mode: ${input.layoutMode || 'molecular'}`,
+    ];
+    if (input.masterRootMac) {
+      yamlLines.push(`master_root_mac: "${getAnonMac(input.masterRootMac)}"`);
+    }
+    if (input.homeassistantMac) {
+      yamlLines.push(`homeassistant_mac: "${getAnonMac(input.homeassistantMac)}"`);
+    }
+    yamlLines.push('show_offline: true');
+    yamlLines.push('integrations:');
+
+    for (const int of anonIntegrations) {
+      yamlLines.push(`  - config_entry_id: "${int.config_entry_id}"`);
+      if (int.is_master) {
+        yamlLines.push('    is_master: true');
+      }
+      if (int.root_mac) {
+        yamlLines.push(`    root_mac: "${int.root_mac}"`);
+      }
+      if (int.link_attribute) {
+        yamlLines.push(`    link_attribute: "${int.link_attribute}"`);
+      }
+      if (int.lan_values && (Array.isArray(int.lan_values) ? int.lan_values.length > 0 : Boolean(int.lan_values))) {
+        const vals = Array.isArray(int.lan_values) ? int.lan_values : [int.lan_values];
+        yamlLines.push(`    lan_values: ${JSON.stringify(vals)}`);
+      }
+      if (int.wifi_values && (Array.isArray(int.wifi_values) ? int.wifi_values.length > 0 : Boolean(int.wifi_values))) {
+        const vals = Array.isArray(int.wifi_values) ? int.wifi_values : [int.wifi_values];
+        yamlLines.push(`    wifi_values: ${JSON.stringify(vals)}`);
+      }
+    }
+
+    const payload = {
+      schema_version: '1.0',
+      exported_at: new Date().toISOString(),
+      card_config_yaml: yamlLines.join('\n'),
+      layoutMode: input.layoutMode || 'molecular',
+      masterRootMac: input.masterRootMac ? getAnonMac(input.masterRootMac) : undefined,
+      homeassistantMac: input.homeassistantMac ? getAnonMac(input.homeassistantMac) : undefined,
+      integrations: anonIntegrations,
+      clientsByConfigEntry: anonClientsRecord,
+    };
+
+    return JSON.stringify(payload, null, 2);
   }
 }

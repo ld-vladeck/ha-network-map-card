@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.10.3] - 2026-10-24
+
+- **Layout Molecolare Reattivo:** Adattamento dinamico dell'orientamento dello scheletro in base allo schermo (orizzontale su desktop, verticale su smartphone) con naturale inclinazione organica.
+- **Ramo 'Disconnessi':** Raggruppamento chiaro e visivamente distinto dei dispositivi offline sotto un'interfaccia dedicata.
+- **Miglioramenti generali:** Raffinamento del riconoscimento dei dispositivi e stabilità generale del grafo.
+
 ## [2026.10.2] - 2026-10-18
 
 - **Layout Molecolare:** Nuovo layout predefinito a scheletro fisso con grappoli periferici liberi e supporto multi-router senza sovrapposizioni.

@@ -92,6 +92,14 @@ export class TopologyEngine {
 
         // Determine interface name and connection type
         let rawInterface = client.linkInfo ? String(client.linkInfo).trim() : '';
+        if (
+          !rawInterface ||
+          rawInterface.toLowerCase() === 'null' ||
+          rawInterface.toLowerCase() === 'none' ||
+          rawInterface.toLowerCase() === 'unknown'
+        ) {
+          rawInterface = '';
+        }
         let connType = detectConnectionType(
           rawInterface || undefined,
           client.attributes,
@@ -105,8 +113,10 @@ export class TopologyEngine {
             rawInterface = 'LAN';
           } else if (connType === 'wifi') {
             rawInterface = 'Wi-Fi';
+          } else if (client.isConnected === false || client.state === 'not_home') {
+            rawInterface = 'Disconnessi';
           } else {
-            rawInterface = 'Rete';
+            rawInterface = 'Non specificata';
           }
         }
 
