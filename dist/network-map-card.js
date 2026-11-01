@@ -18106,6 +18106,7 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
       left: 0;
       bottom: 0;
       right: 0;
+      touch-action: none;
     }
     .status-overlay {
       position: absolute;
@@ -18656,6 +18657,17 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
 					this._selectedNode = this._currentNodes.find((e) => e.id === t);
 				} else this._selectedNode = void 0;
 				this.requestUpdate();
+			}), this._network.on("doubleClick", (e) => {
+				if (!this._network || !e?.pointer?.canvas) return;
+				let t = !!(e.event?.srcEvent || e.event)?.shiftKey, n = this._network.getScale(), r = t ? Math.max(.1, n / 1.5) : n * 1.5;
+				this._network.moveTo({
+					position: e.pointer.canvas,
+					scale: r,
+					animation: {
+						duration: 300,
+						easingFunction: "easeInOutQuad"
+					}
+				});
 			}), this._network.on("stabilized", () => {
 				try {
 					this._network?.fit({ animation: {

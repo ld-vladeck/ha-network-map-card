@@ -111,6 +111,7 @@ export class NetworkMapCard extends LitElement {
       left: 0;
       bottom: 0;
       right: 0;
+      touch-action: none;
     }
     .status-overlay {
       position: absolute;
@@ -783,6 +784,21 @@ export class NetworkMapCard extends LitElement {
           this._selectedNode = undefined;
         }
         this.requestUpdate();
+      });
+
+      // Doppio click / doppio tap per zoomare (stile Google Maps)
+      this._network.on('doubleClick', (params) => {
+        if (!this._network || !params?.pointer?.canvas) return;
+        const srcEvent = params.event?.srcEvent || params.event;
+        const isZoomOut = Boolean(srcEvent?.shiftKey);
+        const currentScale = this._network.getScale();
+        const targetScale = isZoomOut ? Math.max(0.1, currentScale / 1.5) : currentScale * 1.5;
+
+        this._network.moveTo({
+          position: params.pointer.canvas,
+          scale: targetScale,
+          animation: { duration: 300, easingFunction: 'easeInOutQuad' },
+        });
       });
 
       // Auto-fit appropriato automatico non appena i nodi raggiungono la posizione definitiva
