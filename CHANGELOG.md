@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.11.0] - 2026-11-01
+
+- **Zoom con doppio click e doppio tap:** Introdotto lo zoom progressivo in stile Google Maps con centratura dinamica sul punto toccato o cliccato. Supportato anche `Shift + doppio click` per rimpicciolire.
+- **Supporto multi-touch e pinch-to-zoom:** Configurato `touch-action: none` per consentire lo zoom naturale con due dita (allargamento/pizzico) ed eliminare i conflitti con le gesture del browser mobile.
+- **Topologia di riferimento dedicata:** Aggiunto `src/reference-network.json` con dati reali anonimizzati per garantire test accurati e generazione automatica dell'anteprima (`preview.html`).
+
 ## [2026.10.3] - 2026-10-24
 
 - **Layout Molecolare Reattivo:** Adattamento dinamico dell'orientamento dello scheletro in base allo schermo (orizzontale su desktop, verticale su smartphone) con naturale inclinazione organica.
