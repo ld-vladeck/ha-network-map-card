@@ -101,39 +101,19 @@ ${bundleJs}
 }
 
 describe('Issue Reproduction Runner', () => {
-  it('simulates and verifies network topology from diagnostic JSON payload', () => {
-    const samplePayload = JSON.stringify({
-      schema_version: '1.0',
-      masterRootMac: '00:00:00:00:00:01',
-      integrations: [
-        {
-          config_entry_id: 'integration_entry_1',
-          root_mac: '00:00:00:00:00:01',
-          is_master: true,
-          lan_values: ['LAN 1'],
-        },
-      ],
-      clientsByConfigEntry: {
-        integration_entry_1: [
-          {
-            mac: '00:00:00:00:00:02',
-            name: 'Device_02',
-            linkInfo: 'LAN 1',
-            isConnected: true,
-            state: 'home',
-          },
-        ],
-      },
-    });
+  it('simulates and verifies network topology from reference JSON payload', () => {
+    const referencePath = path.resolve(__dirname, './reference-network.json');
+    const rawJson = fs.readFileSync(referencePath, 'utf-8');
 
-    const graph = runDiagnosticsSimulation(samplePayload);
+    const graph = runDiagnosticsSimulation(rawJson);
     expect(graph.nodes.length).toBeGreaterThanOrEqual(2);
     expect(graph.edges.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('simulates real network topology from report_test.txt fixture and generates preview.html using production bundle', () => {
-    const filePath = path.resolve(__dirname, '../report_test.txt');
-    if (!fs.existsSync(filePath)) return;
+  it('simulates real network topology from reference-network.json (or report_test.txt) and generates preview.html', () => {
+    const reportPath = path.resolve(__dirname, '../report_test.txt');
+    const referencePath = path.resolve(__dirname, './reference-network.json');
+    const filePath = fs.existsSync(reportPath) ? reportPath : referencePath;
 
     const rawJson = fs.readFileSync(filePath, 'utf-8');
     const graph = runDiagnosticsSimulation(rawJson);
