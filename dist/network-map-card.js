@@ -16992,16 +16992,43 @@ var pF = class {
 			}
 		}
 		r.availableIntegrations = Array.from(c.values()).filter((e) => e.trackerCount > 0).sort((e, t) => t.trackerCount - e.trackerCount);
-		let u = /* @__PURE__ */ new Map();
-		for (let e of s) e.device_id && (u.has(e.device_id) || u.set(e.device_id, []), u.get(e.device_id).push(e));
-		let d = /* @__PURE__ */ new Map(), f = new Set(t.map((e) => uF(e.root_mac)).filter(Boolean));
+		let u = (t) => {
+			let n = e.states[t.entity_id];
+			if (n?.attributes) for (let e of [
+				"mac",
+				"mac_address",
+				"mac_addr",
+				"wifi_mac"
+			]) {
+				let t = n.attributes[e];
+				if (t) {
+					let e = uF(String(t));
+					if (e && e.includes(":") && e.length === 17) return e;
+				}
+			}
+			if (t.unique_id) {
+				let e = uF(t.unique_id);
+				if (e && e.includes(":") && e.length === 17) return e;
+				let n = t.unique_id.replace(/[^a-fA-F0-9]/g, "").toLowerCase();
+				if (n.length === 12) return n.match(/.{1,2}/g)?.join(":");
+			}
+		}, d = /* @__PURE__ */ new Map(), f = /* @__PURE__ */ new Map();
+		for (let e of s) if (e.device_id && (d.has(e.device_id) || d.set(e.device_id, []), d.get(e.device_id).push(e)), e.config_entry_id) {
+			let t = u(e);
+			if (t) {
+				f.has(e.config_entry_id) || f.set(e.config_entry_id, /* @__PURE__ */ new Map());
+				let n = f.get(e.config_entry_id);
+				n.has(t) || n.set(t, []), n.get(t).push(e);
+			}
+		}
+		let p = /* @__PURE__ */ new Map(), m = new Set(t.map((e) => uF(e.root_mac)).filter(Boolean));
 		for (let e of o) if (e.connections && Array.isArray(e.connections)) {
 			let t = e.connections.find((e) => Array.isArray(e) && e[0]?.toLowerCase() === "mac");
 			if (t && t[1]) {
 				let n = uF(t[1]);
-				if (f.has(n)) {
+				if (m.has(n)) {
 					let t = e.name_by_user || e.name;
-					t && d.set(n, t);
+					t && p.set(n, t);
 				}
 			}
 		}
@@ -17016,9 +17043,9 @@ var pF = class {
 				let t = n.attributes[e];
 				if (t) {
 					let e = uF(String(t));
-					if (f.has(e) && !d.has(e)) {
+					if (m.has(e) && !p.has(e)) {
 						let t = n.attributes.friendly_name || n.attributes.name;
-						t && d.set(e, t);
+						t && p.set(e, t);
 					}
 				}
 			}
@@ -17026,46 +17053,80 @@ var pF = class {
 		for (let n of t) {
 			let t = n.config_entry_id.trim(), a = i.get(n.config_entry_id), s = o.filter((e) => !e.config_entries || e.disabled_by ? !1 : e.config_entries.includes(t) || e.config_entries.some((e) => e.toLowerCase() === t.toLowerCase()));
 			r.matchedDevices += s.length;
-			for (let t of s) {
-				let i;
-				if (t.connections && Array.isArray(t.connections)) {
-					let e = t.connections.find((e) => Array.isArray(e) && e[0]?.toLowerCase() === "mac");
-					e && e[1] && (i = uF(e[1]));
+			for (let i of s) {
+				let o;
+				if (i.connections && Array.isArray(i.connections)) {
+					let e = i.connections.find((e) => Array.isArray(e) && e[0]?.toLowerCase() === "mac");
+					e && e[1] && (o = uF(e[1]));
 				}
-				let o = (u.get(t.id) || []).filter((e) => !e.disabled_by), s = o.filter((e) => e.entity_id.startsWith("device_tracker.")), c = s.length > 0 ? s[0] : o[0], l = c ? e.states[c.entity_id] : void 0, d = i;
-				if (!d && l) {
-					let e = n.mac_attribute && l.attributes?.[n.mac_attribute] || l.attributes?.mac_address || l.attributes?.mac || l.attributes?.mac_addr;
-					e && (d = uF(String(e)));
+				let s = (d.get(i.id) || []).filter((e) => !e.disabled_by), c = s.filter((e) => e.entity_id.startsWith("device_tracker."));
+				if (c.length === 0 && o && f.has(t)) {
+					let e = (f.get(t).get(o) || []).filter((e) => !e.disabled_by && e.entity_id.startsWith("device_tracker."));
+					e.length > 0 && (c = e);
 				}
-				if (!d) continue;
-				let f;
+				let l = c.length > 0 ? c[0] : s[0], u = l ? e.states[l.entity_id] : void 0, p = o;
+				if (!p && u) {
+					let e = n.mac_attribute && u.attributes?.[n.mac_attribute] || u.attributes?.mac_address || u.attributes?.mac || u.attributes?.mac_addr;
+					e && (p = uF(String(e)));
+				}
+				if (!p) continue;
+				let m;
 				if (n.link_attribute) {
-					let e = l?.attributes?.[n.link_attribute];
+					let e = u?.attributes?.[n.link_attribute];
 					if (e != null) {
 						let t = String(e).trim();
-						t && t.toLowerCase() !== "null" && t.toLowerCase() !== "none" && t.toLowerCase() !== "unknown" && (f = t);
+						t && t.toLowerCase() !== "null" && t.toLowerCase() !== "none" && t.toLowerCase() !== "unknown" && (m = t);
 					}
 				}
-				let p = c?.name || l?.attributes?.friendly_name || l?.attributes?.host_name || void 0, m = t.name_by_user || t.name || void 0, h = p || m || d, g = l?.attributes?.ip || l?.attributes?.ip_address || l?.attributes?.ipv4, _ = l?.state, v = !l || _ === "home" || _ === "on" || _ === "connected", y = fF(f, l?.attributes, n.lan_values, n.wifi_values);
+				let h = l?.name || u?.attributes?.friendly_name || u?.attributes?.host_name || void 0, g = i.name_by_user || i.name || void 0, _ = h || g || p, v = u?.attributes?.ip || u?.attributes?.ip_address || u?.attributes?.ipv4, y = u?.state, b = !!u?.attributes?.restored, x = u ? !b && (y === "home" || y === "on" || y === "connected") : !1, S = fF(m, u?.attributes, n.lan_values, n.wifi_values);
 				a.push({
-					mac: d,
-					name: h,
-					entityName: p,
-					deviceName: m,
-					ip: g,
-					state: _,
-					isConnected: v,
-					connectionType: y,
-					entityId: c?.entity_id,
-					deviceId: t.id,
-					linkInfo: f,
-					attributes: l?.attributes
+					mac: p,
+					name: _,
+					entityName: h,
+					deviceName: g,
+					ip: v,
+					state: y,
+					isConnected: x,
+					connectionType: S,
+					entityId: l?.entity_id,
+					deviceId: i.id,
+					linkInfo: m,
+					attributes: u?.attributes
+				}), r.matchedEntities++;
+			}
+			let c = new Set(a.map((e) => e.mac));
+			if (f.has(t)) for (let [i, o] of f.get(t).entries()) {
+				if (c.has(i)) continue;
+				let t = o.filter((e) => !e.disabled_by && e.entity_id.startsWith("device_tracker."));
+				if (t.length === 0) continue;
+				let s = t[0], l = e.states[s.entity_id];
+				if (!l) continue;
+				let u;
+				if (n.link_attribute) {
+					let e = l.attributes?.[n.link_attribute];
+					if (e != null) {
+						let t = String(e).trim();
+						t && t.toLowerCase() !== "null" && t.toLowerCase() !== "none" && t.toLowerCase() !== "unknown" && (u = t);
+					}
+				}
+				let d = s.name || l.attributes?.friendly_name || l.attributes?.host_name || void 0, f = d || i, p = l.attributes?.ip || l.attributes?.ip_address || l.attributes?.ipv4, m = l.state, h = !l.attributes?.restored && (m === "home" || m === "on" || m === "connected"), g = fF(u, l.attributes, n.lan_values, n.wifi_values);
+				a.push({
+					mac: i,
+					name: f,
+					entityName: d,
+					ip: p,
+					state: m,
+					isConnected: h,
+					connectionType: g,
+					entityId: s.entity_id,
+					linkInfo: u,
+					attributes: l.attributes
 				}), r.matchedEntities++;
 			}
 		}
 		return {
 			clientsByConfigEntry: i,
-			rootNames: d,
+			rootNames: p,
 			diagnostics: r
 		};
 	}
@@ -17196,7 +17257,57 @@ var pF = class {
 function mF(e) {
 	return e.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
-var hF = class {
+function hF(e) {
+	if (e != null && e !== "") {
+		if (typeof e == "number") return e > 1e11 ? e : e * 1e3;
+		if (typeof e == "string") {
+			let t = Date.parse(e);
+			if (!isNaN(t)) return t;
+			let n = Number(e);
+			if (!isNaN(n) && n > 0) return n > 1e11 ? n : n * 1e3;
+		}
+	}
+}
+function gF(e) {
+	if (!e?.attributes) return;
+	let t = e.attributes;
+	for (let e of [
+		"last_seen",
+		"connect_time",
+		"connected_at",
+		"link_time",
+		"last_updated"
+	]) if (t[e] !== void 0) {
+		let n = hF(t[e]);
+		if (n !== void 0) return n;
+	}
+}
+function _F(e) {
+	if (e != null && e !== "") {
+		if (typeof e == "number") return e;
+		if (typeof e == "string") {
+			let t = e.match(/[-+]?\d+/);
+			if (t) {
+				let e = Number(t[0]);
+				if (!isNaN(e)) return e;
+			}
+		}
+	}
+}
+function vF(e) {
+	if (!e?.attributes) return;
+	let t = e.attributes;
+	for (let e of [
+		"signal",
+		"rssi",
+		"signal_strength",
+		"wifi_signal"
+	]) if (t[e] !== void 0) {
+		let n = _F(t[e]);
+		if (n !== void 0) return n;
+	}
+}
+var yF = class {
 	static buildGraph(e) {
 		let t = uF(e.masterRootMac), n = uF(e.homeassistantMac), r = /* @__PURE__ */ new Map(), i = /* @__PURE__ */ new Set(), a = e.rootNames || /* @__PURE__ */ new Map();
 		for (let o of e.integrations) {
@@ -17267,7 +17378,7 @@ var hF = class {
 					ip: e.ip,
 					attributes: e.attributes
 				}, _ = !!(n && u === n), v = r.get(u);
-				v ? (_ && (v.isHomeAssistant = !0), v.sources ||= [], v.sources.some((e) => e.integrationId === g.integrationId) || v.sources.push(g), !a.has(u) && (v.label === "Router Principale" || v.label.startsWith("Access Point (") || v.label === u) && e.name && e.name !== u && (v.label = e.name), !v.ip && e.ip && (v.ip = e.ip), !v.entityId && e.entityId && (v.entityId = e.entityId), e.state !== void 0 && (v.state = e.state, v.isConnected = e.isConnected), p !== "unknown" && (v.connectionType = p)) : r.set(u, {
+				v ? (_ && (v.isHomeAssistant = !0), v.sources ||= [], v.sources.some((e) => e.integrationId === g.integrationId) || v.sources.push(g), !a.has(u) && (v.label === "Router Principale" || v.label.startsWith("Access Point (") || v.label === u) && e.name && e.name !== u && (v.label = e.name), !v.ip && e.ip && (v.ip = e.ip), !v.entityId && e.entityId && (v.entityId = e.entityId), e.isConnected === !0 ? (v.isConnected = !0, e.state !== void 0 && e.state !== "unavailable" && e.state !== "unknown" && (v.state = e.state)) : v.isConnected !== !0 && (e.state !== void 0 && (v.state = e.state), e.isConnected !== void 0 && (v.isConnected = e.isConnected)), p !== "unknown" && (v.connectionType = p)) : r.set(u, {
 					id: u,
 					label: e.name || u,
 					mac: u,
@@ -17326,7 +17437,36 @@ var hF = class {
 			let n = t[0];
 			for (let e = 1; e < t.length; e++) {
 				let i = t[e], a = i.isConnected !== !1, o = n.isConnected !== !1;
-				(a && !o || (a || !o) && (r.get(i.from)?.depth ?? 0) > (r.get(n.from)?.depth ?? 0)) && (n = i);
+				if (a && !o) {
+					n = i;
+					continue;
+				}
+				if (!a && o) continue;
+				let s = !!(i.client?.linkInfo && i.client.linkInfo.toLowerCase() !== "null" && i.client.linkInfo.toLowerCase() !== "none" && i.client.linkInfo.toLowerCase() !== "unknown"), c = !!(n.client?.linkInfo && n.client.linkInfo.toLowerCase() !== "null" && n.client.linkInfo.toLowerCase() !== "none" && n.client.linkInfo.toLowerCase() !== "unknown"), l = !!(i.client?.state && i.client.state !== "unavailable" && i.client.state !== "unknown"), u = !!(n.client?.state && n.client.state !== "unavailable" && n.client.state !== "unknown"), d = (l ? 2 : 0) + +!!s, f = (u ? 2 : 0) + +!!c;
+				if (d > f) {
+					n = i;
+					continue;
+				}
+				if (d < f) continue;
+				let p = r.get(i.from)?.depth ?? 0, m = r.get(n.from)?.depth ?? 0;
+				if (p > m) {
+					n = i;
+					continue;
+				}
+				if (p < m) continue;
+				let h = gF(i.client), g = gF(n.client);
+				if (h !== void 0 && g !== void 0) {
+					if (h > g) {
+						n = i;
+						continue;
+					}
+					if (h < g) continue;
+				} else if (h !== void 0 && g === void 0) {
+					n = i;
+					continue;
+				} else if (h === void 0 && g !== void 0) continue;
+				let _ = vF(i.client), v = vF(n.client);
+				_ !== void 0 && v !== void 0 && _ > v && (n = i);
 			}
 			f.push({
 				from: n.from,
@@ -17334,7 +17474,10 @@ var hF = class {
 				connectionType: n.connectionType
 			}), p.add(n.from);
 			let i = r.get(e);
-			i && (i.depth = (r.get(n.from)?.depth ?? 0) + 1, n.connectionType && n.connectionType !== "unknown" && (i.connectionType = n.connectionType), n.client && (n.client.state !== void 0 && (i.state = n.client.state, i.isConnected = n.client.isConnected), n.client.ip && (i.ip = n.client.ip), n.client.entityId && (i.entityId = n.client.entityId)));
+			if (i && (i.depth = (r.get(n.from)?.depth ?? 0) + 1, n.connectionType && n.connectionType !== "unknown" && (i.connectionType = n.connectionType), n.client && (n.client.state !== void 0 && (i.state = n.client.state), n.client.isConnected !== void 0 && (i.isConnected = n.client.isConnected), n.client.ip && (i.ip = n.client.ip), n.client.entityId && (i.entityId = n.client.entityId)), i.sources?.some((e) => e.isConnected === !0 || e.state && e.state !== "not_home" && e.state !== "unavailable" && e.state !== "unknown") && (i.isConnected = !0, !i.state || i.state === "unavailable" || i.state === "unknown"))) {
+				let e = i.sources?.find((e) => e.state && e.state !== "not_home" && e.state !== "unavailable" && e.state !== "unknown");
+				e?.state && (i.state = e.state);
+			}
 		}
 		for (let e of o.values()) p.has(e.to) && f.push(e);
 		let m = Array.from(r.values()).filter((e) => e.isRoot ? !0 : !e.isInterface || p.has(e.id));
@@ -17355,7 +17498,7 @@ var hF = class {
 			edges: f
 		};
 	}
-}, gF = class extends Le {
+}, bF = class extends Le {
 	constructor(...e) {
 		super(...e), this._availableIntegrations = [], this._allDiscoveredDevices = [], this._selectedIntegrationToAdd = "", this._expandedIntegrations = /* @__PURE__ */ new Set([0]), this._anonCopyStatus = "";
 	}
@@ -18015,10 +18158,10 @@ var hF = class {
     `;
 	}
 };
-customElements.get("network-map-card-editor") || customElements.define("network-map-card-editor", gF);
+customElements.get("network-map-card-editor") || customElements.define("network-map-card-editor", bF);
 //#endregion
 //#region src/network-map-card.ts
-var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistant.io/homeassistant/icon.png", yF = class extends Le {
+var xF = "/static/icons/favicon-192x192.png", SF = "https://brands.home-assistant.io/homeassistant/icon.png", CF = class extends Le {
 	constructor(...e) {
 		super(...e), this._nodesDataSet = new nN([]), this._edgesDataSet = new nN([]), this._currentNodes = [], this._initialized = !1, this._isBuilding = !1, this._lastUpdateTime = 0, this._lastDataSignature = "", this._showIntegrationsList = !0, this._copyNotification = "", this._showOffline = !0, this._interfaceChildrenMap = /* @__PURE__ */ new Map(), this._nodeParentMap = /* @__PURE__ */ new Map(), this._lastAspectOrientation = "landscape", this._currentLayoutMode = "";
 	}
@@ -18733,7 +18876,7 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
 					let e = await pF.fetchClients(this._hass, t);
 					this._diagnostics = e.diagnostics, r = e.clientsByConfigEntry, i = e.rootNames;
 				}
-				let a = hF.buildGraph({
+				let a = yF.buildGraph({
 					masterRootMac: n || "",
 					integrations: t,
 					clientsByConfigEntry: r,
@@ -19009,8 +19152,8 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
 							label: t,
 							title: `<b>Home Assistant Server</b><br/>MAC: ${e.mac}${e.ip ? `<br/>IP: ${e.ip}` : ""}`,
 							shape: "image",
-							image: _F,
-							brokenImage: vF,
+							image: xF,
+							brokenImage: SF,
 							size: 13,
 							level: l ? e.depth ?? 0 : void 0,
 							x: l ? void 0 : i,
@@ -19550,11 +19693,11 @@ var _F = "/static/icons/favicon-192x192.png", vF = "https://brands.home-assistan
     `;
 	}
 };
-customElements.get("network-map-card") || customElements.define("network-map-card", yF), window.customCards = window.customCards || [], window.customCards.push({
+customElements.get("network-map-card") || customElements.define("network-map-card", CF), window.customCards = window.customCards || [], window.customCards.push({
 	type: "network-map-card",
 	name: "Network Map Card",
 	description: "Mappa topologica dinamica della rete locale basata su integrazioni e MAC address.",
 	preview: !0
 });
 //#endregion
-export { yF as NetworkMapCard };
+export { CF as NetworkMapCard };

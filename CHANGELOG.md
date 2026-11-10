@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.11.1] - 2026-11-10
+
+### Added
+- **Tie-break roaming Wi-Fi:** Gestione del transitorio di roaming tra Access Point a pari livello con prioritizzazione basata su timestamp più recente (`last_seen`, `connect_time`) e potenza del segnale (`signal`, `rssi`).
+
+### Fixed
+- **Compatibilità HA Core 2026.11:** Risolto mancato aggancio dei client tracker privi di `device_id` tramite indicizzazione automatica `(config_entry, MAC)`.
+- **Protezione stato online:** Impedita la sovrascrittura dello stato attivo da parte di entità `unavailable` o ripristinate (`restored: true`) di altre integrazioni.
+- **Punteggio qualità archi:** Precedenza alle interfacce e stati concreti rispetto a candidati fantasma o generici non specificati.
+
 ## [2026.11.0] - 2026-11-01
 
 - **Zoom con doppio click e doppio tap:** Introdotto lo zoom progressivo in stile Google Maps con centratura dinamica sul punto toccato o cliccato. Supportato anche `Shift + doppio click` per rimpicciolire.
