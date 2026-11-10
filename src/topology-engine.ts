@@ -30,6 +30,61 @@ function slugify(text: string): string {
     .replace(/^_+|_+$/g, '');
 }
 
+function parseTimestamp(val: any): number | undefined {
+  if (val === undefined || val === null || val === '') return undefined;
+  if (typeof val === 'number') {
+    return val > 1e11 ? val : val * 1000;
+  }
+  if (typeof val === 'string') {
+    const parsed = Date.parse(val);
+    if (!isNaN(parsed)) return parsed;
+    const num = Number(val);
+    if (!isNaN(num) && num > 0) {
+      return num > 1e11 ? num : num * 1000;
+    }
+  }
+  return undefined;
+}
+
+function getClientTimestamp(client?: DiscoveredClient): number | undefined {
+  if (!client?.attributes) return undefined;
+  const attrs = client.attributes;
+  const tsKeys = ['last_seen', 'connect_time', 'connected_at', 'link_time', 'last_updated'];
+  for (const k of tsKeys) {
+    if (attrs[k] !== undefined) {
+      const ts = parseTimestamp(attrs[k]);
+      if (ts !== undefined) return ts;
+    }
+  }
+  return undefined;
+}
+
+function parseSignal(val: any): number | undefined {
+  if (val === undefined || val === null || val === '') return undefined;
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    const match = val.match(/[-+]?\d+/);
+    if (match) {
+      const num = Number(match[0]);
+      if (!isNaN(num)) return num;
+    }
+  }
+  return undefined;
+}
+
+function getClientSignal(client?: DiscoveredClient): number | undefined {
+  if (!client?.attributes) return undefined;
+  const attrs = client.attributes;
+  const sigKeys = ['signal', 'rssi', 'signal_strength', 'wifi_signal'];
+  for (const k of sigKeys) {
+    if (attrs[k] !== undefined) {
+      const s = parseSignal(attrs[k]);
+      if (s !== undefined) return s;
+    }
+  }
+  return undefined;
+}
+
 export class TopologyEngine {
   public static buildGraph(input: BuildGraphInput): GraphData {
     const masterRootMac = normalizeMac(input.masterRootMac);
@@ -206,9 +261,19 @@ export class TopologyEngine {
           if (!existingNode.entityId && client.entityId) {
             existingNode.entityId = client.entityId;
           }
-          if (client.state !== undefined) {
-            existingNode.state = client.state;
-            existingNode.isConnected = client.isConnected;
+          // Prioritize online status: a valid online connection never gets downgraded by an offline/unavailable report
+          if (client.isConnected === true) {
+            existingNode.isConnected = true;
+            if (client.state !== undefined && client.state !== 'unavailable' && client.state !== 'unknown') {
+              existingNode.state = client.state;
+            }
+          } else if (existingNode.isConnected !== true) {
+            if (client.state !== undefined) {
+              existingNode.state = client.state;
+            }
+            if (client.isConnected !== undefined) {
+              existingNode.isConnected = client.isConnected;
+            }
           }
           if (connType !== 'unknown') {
             existingNode.connectionType = connType;
@@ -307,12 +372,84 @@ export class TopologyEngine {
           continue;
         }
 
-        // Rule 2: If both online or both offline, evaluate topology depth
+        // Rule 1b: If both are online (or both offline), prefer candidates with concrete link information and state
+        // over ghost/empty candidates ("Non specificata" or missing entity state)
+        const edgeHasSpecificInterface = Boolean(
+          edge.client?.linkInfo &&
+          edge.client.linkInfo.toLowerCase() !== 'null' &&
+          edge.client.linkInfo.toLowerCase() !== 'none' &&
+          edge.client.linkInfo.toLowerCase() !== 'unknown'
+        );
+        const bestHasSpecificInterface = Boolean(
+          bestEdge.client?.linkInfo &&
+          bestEdge.client.linkInfo.toLowerCase() !== 'null' &&
+          bestEdge.client.linkInfo.toLowerCase() !== 'none' &&
+          bestEdge.client.linkInfo.toLowerCase() !== 'unknown'
+        );
+
+        const edgeHasRealState = Boolean(
+          edge.client?.state &&
+          edge.client.state !== 'unavailable' &&
+          edge.client.state !== 'unknown'
+        );
+        const bestHasRealState = Boolean(
+          bestEdge.client?.state &&
+          bestEdge.client.state !== 'unavailable' &&
+          bestEdge.client.state !== 'unknown'
+        );
+
+        const edgeQuality = (edgeHasRealState ? 2 : 0) + (edgeHasSpecificInterface ? 1 : 0);
+        const bestQuality = (bestHasRealState ? 2 : 0) + (bestHasSpecificInterface ? 1 : 0);
+
+        if (edgeQuality > bestQuality) {
+          bestEdge = edge;
+          continue;
+        }
+        if (edgeQuality < bestQuality) {
+          continue;
+        }
+
+        // Rule 2: If both online or both offline with comparable quality, evaluate topology depth
         const depth = nodesMap.get(edge.from)?.depth ?? 0;
         const bestDepth = nodesMap.get(bestEdge.from)?.depth ?? 0;
 
         if (depth > bestDepth) {
           bestEdge = edge;
+          continue;
+        }
+        if (depth < bestDepth) {
+          continue;
+        }
+
+        // Rule 3 (Tie-Breaker for equal depth, e.g. Wi-Fi roaming between APs):
+        // Prefer the candidate with the most recent timestamp (last_seen, connect_time, etc.)
+        const edgeTimestamp = getClientTimestamp(edge.client);
+        const bestTimestamp = getClientTimestamp(bestEdge.client);
+
+        if (edgeTimestamp !== undefined && bestTimestamp !== undefined) {
+          if (edgeTimestamp > bestTimestamp) {
+            bestEdge = edge;
+            continue;
+          }
+          if (edgeTimestamp < bestTimestamp) {
+            continue;
+          }
+        } else if (edgeTimestamp !== undefined && bestTimestamp === undefined) {
+          bestEdge = edge;
+          continue;
+        } else if (edgeTimestamp === undefined && bestTimestamp !== undefined) {
+          continue;
+        }
+
+        // Rule 4 (Tie-Breaker for signal strength at equal depth and timestamp):
+        const edgeSignal = getClientSignal(edge.client);
+        const bestSignal = getClientSignal(bestEdge.client);
+
+        if (edgeSignal !== undefined && bestSignal !== undefined) {
+          if (edgeSignal > bestSignal) {
+            bestEdge = edge;
+            continue;
+          }
         }
       }
 
@@ -335,6 +472,8 @@ export class TopologyEngine {
         if (bestEdge.client) {
           if (bestEdge.client.state !== undefined) {
             childNode.state = bestEdge.client.state;
+          }
+          if (bestEdge.client.isConnected !== undefined) {
             childNode.isConnected = bestEdge.client.isConnected;
           }
           if (bestEdge.client.ip) {
@@ -342,6 +481,22 @@ export class TopologyEngine {
           }
           if (bestEdge.client.entityId) {
             childNode.entityId = bestEdge.client.entityId;
+          }
+        }
+
+        // Ensure childNode does not lose online state if any authoritative source reports it online
+        const hasOnlineSource = childNode.sources?.some(
+          (s) => s.isConnected === true || (s.state && s.state !== 'not_home' && s.state !== 'unavailable' && s.state !== 'unknown')
+        );
+        if (hasOnlineSource) {
+          childNode.isConnected = true;
+          if (!childNode.state || childNode.state === 'unavailable' || childNode.state === 'unknown') {
+            const validSource = childNode.sources?.find(
+              (s) => s.state && s.state !== 'not_home' && s.state !== 'unavailable' && s.state !== 'unknown'
+            );
+            if (validSource?.state) {
+              childNode.state = validSource.state;
+            }
           }
         }
       }

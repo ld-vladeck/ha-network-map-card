@@ -110,10 +110,15 @@ describe('Issue Reproduction Runner', () => {
     expect(graph.edges.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('simulates real network topology from reference-network.json (or report_test.txt) and generates preview.html', () => {
+  it('simulates real network topology from reference-network.json (or debug_rete.json / report_test.txt) and generates preview.html', () => {
+    const debugPath = path.resolve(__dirname, '../debug_rete.json');
     const reportPath = path.resolve(__dirname, '../report_test.txt');
     const referencePath = path.resolve(__dirname, './reference-network.json');
-    const filePath = fs.existsSync(reportPath) ? reportPath : referencePath;
+    const filePath = fs.existsSync(debugPath)
+      ? debugPath
+      : fs.existsSync(reportPath)
+      ? reportPath
+      : referencePath;
 
     const rawJson = fs.readFileSync(filePath, 'utf-8');
     const graph = runDiagnosticsSimulation(rawJson);
@@ -181,5 +186,33 @@ describe('Issue Reproduction Runner', () => {
     const previewPath = path.resolve(__dirname, '../preview.html');
     generatePreviewHtml(rawJson, previewPath);
     expect(fs.existsSync(previewPath)).toBe(true);
+  });
+
+  it('correctly resolves debug_rete.json keeping active devices online and linked to master router', () => {
+    const debugPath = path.resolve(__dirname, '../debug_rete.json');
+    if (!fs.existsSync(debugPath)) return;
+
+    const rawJson = fs.readFileSync(debugPath, 'utf-8');
+    const graph = runDiagnosticsSimulation(rawJson);
+
+    // Device [05] (Interruttore Luce) is online on router SSID1
+    const dev05 = graph.nodes.find((n) => n.mac === '00:00:00:00:00:05');
+    expect(dev05).toBeDefined();
+    expect(dev05?.isConnected).toBe(true);
+    expect(dev05?.state).toBe('home');
+
+    const dev05Edge = graph.edges.find((e) => e.to === '00:00:00:00:00:05');
+    const ssid1Interface = graph.nodes.find((n) => n.isInterface && n.interfaceName === 'SSID1');
+    expect(dev05Edge?.from).toBe(ssid1Interface?.id);
+
+    // Device [13] (Climatizzatore) is online on router LAN1
+    const dev13 = graph.nodes.find((n) => n.mac === '00:00:00:00:00:13');
+    expect(dev13).toBeDefined();
+    expect(dev13?.isConnected).toBe(true);
+    expect(dev13?.state).toBe('home');
+
+    const dev13Edge = graph.edges.find((e) => e.to === '00:00:00:00:00:13');
+    const lan1Interface = graph.nodes.find((n) => n.isInterface && n.interfaceName === 'LAN1');
+    expect(dev13Edge?.from).toBe(lan1Interface?.id);
   });
 });
