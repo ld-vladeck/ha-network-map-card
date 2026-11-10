@@ -174,4 +174,82 @@ describe('Diagnostics Anonymizer', () => {
     expect(clients[0].mac).toBe('aa:bb:cc:11:22:33');
     expect(clients.some((c) => c.mac === 'aa:bb:cc:99:99:99')).toBe(false);
   });
+
+  it('correctly links unattached tracker entities with device_id: null and marks missing/restored entities as offline', async () => {
+    const mockHass = {
+      callWS: async (msg: any) => {
+        if (msg.type === 'config/device_registry/list') {
+          return [
+            {
+              id: 'dev_tplink_device',
+              connections: [['mac', 'aa:bb:cc:22:33:44']],
+              config_entries: ['tplink_entry'],
+              name: 'TP-Link Device Without Entity Attached',
+            },
+            {
+              id: 'dev_empty_client',
+              connections: [['mac', 'aa:bb:cc:55:66:77']],
+              config_entries: ['tplink_entry'],
+              name: 'Device Without Any Entity',
+            },
+          ];
+        }
+        if (msg.type === 'config/entity_registry/list') {
+          return [
+            // HA 2026.11 issue: device_id is null! But config_entry_id matches and unique_id has MAC
+            {
+              entity_id: 'device_tracker.tplink_unattached',
+              device_id: null,
+              config_entry_id: 'tplink_entry',
+              unique_id: 'aa:bb:cc:22:33:44',
+              disabled_by: null,
+            },
+            // Restored entity
+            {
+              entity_id: 'device_tracker.restored_device',
+              device_id: null,
+              config_entry_id: 'tplink_entry',
+              unique_id: 'aa:bb:cc:88:99:00',
+              disabled_by: null,
+            },
+          ];
+        }
+        return [];
+      },
+      states: {
+        'device_tracker.tplink_unattached': {
+          state: 'home',
+          attributes: { mac: 'aa:bb:cc:22:33:44', ip: '192.168.1.50' },
+        },
+        'device_tracker.restored_device': {
+          state: 'unavailable',
+          attributes: { mac: 'aa:bb:cc:88:99:00', restored: true },
+        },
+      },
+    } as any;
+
+    const result = await HaHelper.fetchClients(mockHass, [
+      { config_entry_id: 'tplink_entry', root_mac: '00:00:00:00:00:01' },
+    ], true);
+
+    const clients = result.clientsByConfigEntry.get('tplink_entry') || [];
+
+    // The unattached tracker must be recovered and recognized as online
+    const unattachedClient = clients.find((c) => c.mac === 'aa:bb:cc:22:33:44');
+    expect(unattachedClient).toBeDefined();
+    expect(unattachedClient?.isConnected).toBe(true);
+    expect(unattachedClient?.state).toBe('home');
+    expect(unattachedClient?.ip).toBe('192.168.1.50');
+
+    // The device without any entity state must NOT be marked connected: true!
+    const emptyClient = clients.find((c) => c.mac === 'aa:bb:cc:55:66:77');
+    if (emptyClient) {
+      expect(emptyClient.isConnected).toBe(false);
+    }
+
+    // The restored entity must be marked isConnected: false
+    const restoredClient = clients.find((c) => c.mac === 'aa:bb:cc:88:99:00');
+    expect(restoredClient).toBeDefined();
+    expect(restoredClient?.isConnected).toBe(false);
+  });
 });

@@ -251,14 +251,51 @@ export class HaHelper {
       .filter((i) => i.trackerCount > 0)
       .sort((a, b) => b.trackerCount - a.trackerCount);
 
-    // Build index of entities by device_id
+    const extractMacFromEntity = (ent: EntityRegistryEntry): string | undefined => {
+      const stateObj = hass.states[ent.entity_id];
+      if (stateObj?.attributes) {
+        for (const attrKey of ['mac', 'mac_address', 'mac_addr', 'wifi_mac']) {
+          const val = stateObj.attributes[attrKey];
+          if (val) {
+            const norm = normalizeMac(String(val));
+            if (norm && norm.includes(':') && norm.length === 17) return norm;
+          }
+        }
+      }
+      if (ent.unique_id) {
+        const norm = normalizeMac(ent.unique_id);
+        if (norm && norm.includes(':') && norm.length === 17) return norm;
+        const hex = ent.unique_id.replace(/[^a-fA-F0-9]/g, '').toLowerCase();
+        if (hex.length === 12) {
+          return hex.match(/.{1,2}/g)?.join(':');
+        }
+      }
+      return undefined;
+    };
+
+    // Build index of entities by device_id and by config_entry_id + MAC
     const entitiesByDeviceId = new Map<string, EntityRegistryEntry[]>();
+    const entitiesByConfigAndMac = new Map<string, Map<string, EntityRegistryEntry[]>>();
+
     for (const ent of entities) {
       if (ent.device_id) {
         if (!entitiesByDeviceId.has(ent.device_id)) {
           entitiesByDeviceId.set(ent.device_id, []);
         }
         entitiesByDeviceId.get(ent.device_id)!.push(ent);
+      }
+      if (ent.config_entry_id) {
+        const entMac = extractMacFromEntity(ent);
+        if (entMac) {
+          if (!entitiesByConfigAndMac.has(ent.config_entry_id)) {
+            entitiesByConfigAndMac.set(ent.config_entry_id, new Map());
+          }
+          const macMap = entitiesByConfigAndMac.get(ent.config_entry_id)!;
+          if (!macMap.has(entMac)) {
+            macMap.set(entMac, []);
+          }
+          macMap.get(entMac)!.push(ent);
+        }
       }
     }
 
@@ -326,7 +363,18 @@ export class HaHelper {
 
         const devEntities = entitiesByDeviceId.get(dev.id) || [];
         const enabledDevEntities = devEntities.filter((e) => !e.disabled_by);
-        const trackerEntities = enabledDevEntities.filter((e) => e.entity_id.startsWith('device_tracker.'));
+        let trackerEntities = enabledDevEntities.filter((e) => e.entity_id.startsWith('device_tracker.'));
+
+        // Fallback: If device has no tracker attached directly (e.g. HA Core 2026.11 issue #440 where device_id is null),
+        // look up tracker entities belonging to this config entry by device MAC address
+        if (trackerEntities.length === 0 && macFromDevice && entitiesByConfigAndMac.has(searchKey)) {
+          const macEntities = entitiesByConfigAndMac.get(searchKey)!.get(macFromDevice) || [];
+          const enabledMacTrackers = macEntities.filter((e) => !e.disabled_by && e.entity_id.startsWith('device_tracker.'));
+          if (enabledMacTrackers.length > 0) {
+            trackerEntities = enabledMacTrackers;
+          }
+        }
+
         const primaryEntity = trackerEntities.length > 0 ? trackerEntities[0] : enabledDevEntities[0];
 
         let entityState = primaryEntity ? hass.states[primaryEntity.entity_id] : undefined;
@@ -382,9 +430,10 @@ export class HaHelper {
           entityState?.attributes?.ipv4;
 
         const rawState = entityState?.state;
+        const isRestored = Boolean(entityState?.attributes?.restored);
         const isConnected = entityState
-          ? rawState === 'home' || rawState === 'on' || rawState === 'connected'
-          : true;
+          ? !isRestored && (rawState === 'home' || rawState === 'on' || rawState === 'connected')
+          : false;
 
         const connType = detectConnectionType(
           linkInfo,
@@ -409,6 +458,75 @@ export class HaHelper {
         });
 
         diagnostics.matchedEntities++;
+      }
+
+      // Also process unlinked tracker entities for this config entry (where device_id is null / unassigned)
+      const processedMacs = new Set(targetList.map((c) => c.mac));
+      if (entitiesByConfigAndMac.has(searchKey)) {
+        for (const [mac, entList] of entitiesByConfigAndMac.get(searchKey)!.entries()) {
+          if (processedMacs.has(mac)) continue;
+
+          const enabledTrackers = entList.filter((e) => !e.disabled_by && e.entity_id.startsWith('device_tracker.'));
+          if (enabledTrackers.length === 0) continue;
+
+          const primaryEntity = enabledTrackers[0];
+          const entityState = hass.states[primaryEntity.entity_id];
+          if (!entityState) continue;
+
+          let linkInfo: string | undefined = undefined;
+          if (integration.link_attribute) {
+            const rawLink = entityState.attributes?.[integration.link_attribute];
+            if (rawLink !== undefined && rawLink !== null) {
+              const trimmed = String(rawLink).trim();
+              if (
+                trimmed &&
+                trimmed.toLowerCase() !== 'null' &&
+                trimmed.toLowerCase() !== 'none' &&
+                trimmed.toLowerCase() !== 'unknown'
+              ) {
+                linkInfo = trimmed;
+              }
+            }
+          }
+
+          const entityName =
+            primaryEntity.name ||
+            entityState.attributes?.friendly_name ||
+            entityState.attributes?.host_name ||
+            undefined;
+
+          const resolvedPrimaryName = entityName || mac;
+          const ip =
+            entityState.attributes?.ip ||
+            entityState.attributes?.ip_address ||
+            entityState.attributes?.ipv4;
+
+          const rawState = entityState.state;
+          const isRestored = Boolean(entityState.attributes?.restored);
+          const isConnected = !isRestored && (rawState === 'home' || rawState === 'on' || rawState === 'connected');
+
+          const connType = detectConnectionType(
+            linkInfo,
+            entityState.attributes,
+            integration.lan_values,
+            integration.wifi_values
+          );
+
+          targetList.push({
+            mac: mac,
+            name: resolvedPrimaryName,
+            entityName: entityName,
+            ip: ip,
+            state: rawState,
+            isConnected: isConnected,
+            connectionType: connType,
+            entityId: primaryEntity.entity_id,
+            linkInfo: linkInfo,
+            attributes: entityState.attributes,
+          });
+
+          diagnostics.matchedEntities++;
+        }
       }
     }
 
